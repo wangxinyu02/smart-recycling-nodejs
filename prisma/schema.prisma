@@ -12,6 +12,7 @@ generator client {
 // Datasource
 datasource db {
   provider = "mysql"
+  url = env("DATABASE_URL")
 }
 
 enum user_role {
