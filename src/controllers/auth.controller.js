@@ -37,12 +37,7 @@ exports.signup = async (req, res) => {
       role: "user",
     });
 
-    return response.success(
-      res,
-      { userId: user.id },
-      "User created successfully",
-      201,
-    );
+    return response.success(res, { id: user.id }, "User created successfully", 201);
   } catch (err) {
     console.error("Signup Error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
@@ -77,7 +72,7 @@ exports.login = async (req, res) => {
     }
 
     const claims = {
-      userId: user.id,
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
@@ -88,7 +83,7 @@ exports.login = async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     });
 
-    return response.success(res, { token, user }, "Login successful", 200);
+    return response.success(res, { token, user:{...claims} }, "Login successful", 200);
   } catch (err) {
     console.error("Login Error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
