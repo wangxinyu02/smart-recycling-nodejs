@@ -1,3 +1,5 @@
+// src/app.js
+
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth.routes");
@@ -23,6 +25,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1", authRoutes);
 
 module.exports = app;
