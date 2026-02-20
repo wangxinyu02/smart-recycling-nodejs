@@ -37,6 +37,8 @@ module.exports = {
         email: true,
         role: true,
         created_at: true,
+        updated_at: true,
+        deleted_at: true,
       },
       orderBy: {
         created_at: "desc",
@@ -53,6 +55,8 @@ module.exports = {
         email: true,
         role: true,
         created_at: true,
+        updated_at: true,
+        deleted_at: true,
       },
     });
   },
@@ -67,6 +71,24 @@ module.exports = {
         email: true,
         role: true,
         created_at: true,
+        updated_at: true,
+        deleted_at: true,
+      },
+    });
+  },
+
+  deleteUserById: async (id) => {
+    return prisma.user.update({
+      where: { id: Number(id) },
+      data: { deleted_at: new Date() },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+        deleted_at: true,
       },
     });
   },

@@ -79,7 +79,6 @@ exports.updateUser = async (req, res) => {
       updateData.name = updateData.name.trim();
       if (updateData.name.length === 0) updateData.name = null; // optional
     }
-    console.log("helo");
 
     if (updateData.email !== undefined) {
       if (typeof updateData.email !== "string") {
@@ -103,6 +102,36 @@ exports.updateUser = async (req, res) => {
       return response.error(res, "Email already registered", 409);
     }
 
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate id
+    const userId = Number(id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return response.error(res, "Invalid user id", 400);
+    }
+
+    // Access control: user can only delete self unless admin
+    if (req.user?.role !== "admin" && req.user?.id !== userId) {
+      return response.error(res, "Forbidden", 403);
+    }
+
+    const user = await userModel.getUserById(userId);
+
+    if (user.deleted_at) {
+      return response.error(res, "User not found or already deleted", 404);
+    }
+
+    const deleted = await userModel.deleteUserById(userId);
+
+    return response.success(res, deleted, "User deleted successfully", 200);
+  } catch (err) {
+    console.error("deleteUser error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

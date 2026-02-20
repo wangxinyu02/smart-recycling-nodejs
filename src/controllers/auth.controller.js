@@ -65,6 +65,10 @@ exports.login = async (req, res) => {
       return response.error(res, "Invalid email or password", 400);
     }
 
+    if (user.deleted_at) {
+      return response.error(res, "User not found or already deleted", 404);
+    }
+
     // ✅ Compare password
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) {
@@ -83,7 +87,7 @@ exports.login = async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     });
 
-    return response.success(res, { token, user:{...claims} }, "Login successful", 200);
+    return response.success(res, { token, user: { ...claims } }, "Login successful", 200);
   } catch (err) {
     console.error("Login Error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
