@@ -37,15 +37,10 @@ exports.sendOtp = async (req, res) => {
     const latest = await otpModel.findLatestOtp(normalizedEmail, purpose);
 
     if (latest) {
-      const secondsSince =
-        (Date.now() - new Date(latest.created_at).getTime()) / 1000;
+      const secondsSince = (Date.now() - new Date(latest.created_at).getTime()) / 1000;
 
       if (secondsSince < RESEND_COOLDOWN_SECONDS) {
-        return response.error(
-          res,
-          `Please wait ${Math.ceil(RESEND_COOLDOWN_SECONDS - secondsSince)}s before requesting another OTP`,
-          429
-        );
+        return response.error(res, `Please wait ${Math.ceil(RESEND_COOLDOWN_SECONDS - secondsSince)}s before requesting another OTP`, 429);
       }
     }
 
@@ -62,7 +57,7 @@ exports.sendOtp = async (req, res) => {
       expires_at: expiresAt,
     });
 
-    await sendOtpEmail({ to: normalizedEmail, otp, purpose });
+    sendOtpEmail({ to: normalizedEmail, otp, purpose }).catch((err) => console.error("sendOtpEmail error:", err));
 
     return response.success(res, null, "OTP sent", 200);
   } catch (err) {
@@ -70,7 +65,6 @@ exports.sendOtp = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
-
 
 exports.verifyOtp = async (req, res) => {
   try {
