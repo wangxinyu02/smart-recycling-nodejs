@@ -3,6 +3,7 @@
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth.routes");
+const otpRoutes = require("./routes/otp.routes");
 const userRoutes = require("./routes/user.routes");
 
 const app = express();
@@ -28,6 +29,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/api/v1", authRoutes);
+app.use("/api/v1", otpRoutes);
 app.use("/api/v1", userRoutes);
 
 console.log("✅ LOADED src/app.js");

@@ -66,7 +66,7 @@ exports.login = async (req, res) => {
     }
 
     if (user.deleted_at) {
-      return response.error(res, "User not found or already deleted", 404);
+      return response.error(res, "User not found", 404);
     }
 
     // ✅ Compare password

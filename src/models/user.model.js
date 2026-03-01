@@ -61,6 +61,21 @@ module.exports = {
     });
   },
 
+  getExistingUserByEmail: (email) => {
+    return prisma.user.findFirst({
+      where: { email: email, deleted_at: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+        deleted_at: true,
+      },
+    });
+  },
+
   updateUserById: (id, data) => {
     return prisma.user.update({
       where: { id: Number(id) },
