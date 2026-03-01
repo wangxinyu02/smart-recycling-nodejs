@@ -93,3 +93,33 @@ exports.login = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email,  password } = req.body;
+
+    if (!email || !password) {
+      return response.error(res, "Email and password are required", 400);
+    }
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+
+    if (typeof password !== "string" || password.length < 8) {
+      return response.error(res, "Password must be at least 8 characters", 400);
+    }
+
+    const user = await userModel.getExistingUserByEmail(normalizedEmail);
+    if (!user) {
+      return response.error(res, "User not found", 404);
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    await userModel.updatePasswordByEmail(normalizedEmail, hashed);
+
+    return response.success(res, null, "Password reset successful", 200);
+  } catch (err) {
+    console.error("resetPassword error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
