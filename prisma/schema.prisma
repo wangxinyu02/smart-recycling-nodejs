@@ -20,6 +20,32 @@ enum user_role {
   admin
 }
 
+enum material_type {
+  plastic
+  paper
+  metal
+  glass
+  ewaste
+  other
+}
+
+enum points_txn_type {
+  earn
+  redeem
+  adjust
+  refund
+}
+
+enum reward_status {
+  active
+  inactive
+}
+
+enum otp_purpose {
+  signup
+  reset
+}
+
 model User {
   id            Int        @id @default(autoincrement())
   name          String?    @db.VarChar(100)
@@ -31,5 +57,156 @@ model User {
   updated_at    DateTime   @updatedAt
   deleted_at    DateTime?
 
+  sessions RecyclingSession[]
+  reward_redemptions  RewardRedemption[]
+  points_transactions PointsTransaction[]
+
+  @@index([deleted_at])
   @@map("users")
+}
+
+model RecyclingSession {
+  id           Int             @id @default(autoincrement())
+  user_id      Int
+  total_co2 Decimal @db.Decimal(10, 2) @default("0.00")
+
+  started_at   DateTime @default(now())
+  ended_at     DateTime?
+
+  created_at   DateTime        @default(now())
+  updated_at   DateTime        @updatedAt
+
+  user         User            @relation(fields: [user_id], references: [id])
+  items        RecyclingItem[]
+  points_transactions PointsTransaction[]
+
+  @@index([user_id])
+  @@map("recycling_sessions")
+}
+
+model RecyclingItem {
+  id         Int              @id @default(autoincrement())
+  session_id Int
+  bin_id     Int
+
+  material   material_type
+  weight     Decimal          @db.Decimal(8, 2)
+  co2_saved  Decimal          @db.Decimal(8, 2)
+
+  created_at DateTime         @default(now())
+
+  session    RecyclingSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  bin        Bin              @relation(fields: [bin_id], references: [id], onDelete: Restrict)
+
+  @@index([session_id])
+  @@index([bin_id])
+  @@map("recycling_items")
+}
+
+model Merchant {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(120)
+  email      String   @unique @db.VarChar(120)
+  phone      String?  @db.VarChar(30)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  deleted_at DateTime?
+
+  rewards     Reward[]
+
+  @@map("merchants")
+}
+
+model Reward {
+  id              Int           @id @default(autoincrement())
+  merchant_id     Int
+  name            String        @db.VarChar(150)
+  description     String?       @db.Text
+  points_needed   Int
+  max_redemptions Int?
+  max_per_user    Int?
+
+  starts_at       DateTime?
+  expires_at      DateTime?
+
+  status          reward_status @default(active)
+
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+  deleted_at      DateTime?
+
+  merchant        Merchant      @relation(fields: [merchant_id], references: [id])
+  redemptions     RewardRedemption[]
+
+  @@index([merchant_id])
+  @@index([status, expires_at])
+  @@map("rewards")
+}
+
+model RewardRedemption {
+  id           Int               @id @default(autoincrement())
+  reward_id    Int
+  user_id      Int
+
+  promo_code   String            @unique @db.VarChar(50)
+
+  redeemed_at  DateTime          @default(now())
+  used_at      DateTime?         // when merchant marked as used
+
+  created_at   DateTime          @default(now())
+  updated_at   DateTime          @updatedAt
+
+  reward       Reward            @relation(fields: [reward_id], references: [id])
+  user         User              @relation(fields: [user_id], references: [id])
+
+  points_transactions PointsTransaction[]
+
+  @@map("reward_redemptions")
+}
+
+model PointsTransaction {
+  id             Int            @id @default(autoincrement())
+  user_id        Int
+  points         Int
+  type           points_txn_type
+
+  session_id     Int?
+  redemption_id  Int?
+
+  created_at     DateTime       @default(now())
+
+  user           User           @relation(fields: [user_id], references: [id])
+  session        RecyclingSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+  redemption     RewardRedemption? @relation(fields: [redemption_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([session_id])
+  @@index([redemption_id])
+  @@map("points_transactions")
+}
+
+model Bin {
+  id              Int        @id @default(autoincrement())
+  name            String?    @db.VarChar(120)
+  material        material_type
+
+  items RecyclingItem[]
+
+  @@map("bins")
+}
+
+model OtpCode {
+  id         Int         @id @default(autoincrement())
+  email      String      @db.VarChar(100)
+  purpose    otp_purpose
+  otp_hash   String      @db.VarChar(255)
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime    @default(now())
+
+  @@index([email, purpose])
+  @@index([expires_at])
+  @@map("otp_codes")
+
 }
