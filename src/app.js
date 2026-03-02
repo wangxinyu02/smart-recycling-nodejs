@@ -6,6 +6,7 @@ const authRoutes = require("./routes/auth.routes");
 const otpRoutes = require("./routes/otp.routes");
 const userRoutes = require("./routes/user.routes");
 const merchantRoutes = require("./routes/merchant.routes");
+const rewardRoutes = require("./routes/reward.routes");
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use("/api/v1", authRoutes);
 app.use("/api/v1", otpRoutes);
 app.use("/api/v1", userRoutes);
 app.use("/api/v1", merchantRoutes);
+app.use("/api/v1", rewardRoutes);
 
 console.log("✅ LOADED src/app.js");
 
