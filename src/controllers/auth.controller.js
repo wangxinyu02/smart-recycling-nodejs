@@ -96,7 +96,7 @@ exports.login = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
   try {
-    const { email,  password } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return response.error(res, "Email and password are required", 400);
@@ -121,5 +121,24 @@ exports.resetPassword = async (req, res) => {
   } catch (err) {
     console.error("resetPassword error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.checkEmailAvailability = async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== "string") {
+      return response.error(res, "Email is required", 400);
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await userModel.getExistingUserByEmail(normalizedEmail);
+
+    return response.success(res, { available: !existing }, "Email check completed", 200);
+  } catch (err) {
+    console.error("checkEmailAvailability error:", err);
+    return response.error(res, "Internal Server Error", 500);
   }
 };

@@ -134,4 +134,11 @@ module.exports = {
       },
     });
   },
+
+  checkEmailExists: (email) => {
+    return prisma.user.findFirst({
+      where: { email: email, deleted_at: null },
+      select: { id: true }, // only check existence
+    });
+  },
 };
