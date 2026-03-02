@@ -8,6 +8,7 @@ const userRoutes = require("./routes/user.routes");
 const merchantRoutes = require("./routes/merchant.routes");
 const rewardRoutes = require("./routes/reward.routes");
 const pointRoutes = require("./routes/point.routes");
+const binRoutes = require("./routes/bin.routes");
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/api/v1", userRoutes);
 app.use("/api/v1", merchantRoutes);
 app.use("/api/v1", rewardRoutes);
 app.use("/api/v1", pointRoutes);
+app.use("/api/v1", binRoutes);
 
 console.log("✅ LOADED src/app.js");
 
