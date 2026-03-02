@@ -1,7 +1,10 @@
 // src/controllers/reward.controller.js
 const rewardModel = require("../models/reward.model");
-const merchantModel = require("../models/merchant.model"); // reuse your existing merchant model
+const merchantModel = require("../models/merchant.model");
+const pointsTxnModel = require("../models/points_transaction.model");
+const rewardRedemptionModel = require("../models/reward_redemption.model");
 const response = require("../utils/response.utils");
+const { generatePromoCode, isRewardCurrentlyValid } = require("../utils/reward.utils");
 
 function toDateOrNull(v) {
   if (v === null || v === undefined || v === "") return null;
@@ -271,6 +274,68 @@ exports.setRewardStatus = async (req, res) => {
     return response.success(res, updated, "Reward status updated", 200);
   } catch (err) {
     console.error("setRewardStatus error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.redeemReward = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const userId = req.user?.id;
+
+    if (!userId) return response.error(res, "userId is required", 400);
+
+    // 1) Check reward existence
+    const reward = await rewardModel.findActiveById(id);
+
+    if (!reward || !isRewardCurrentlyValid(reward)) {
+      return response.error(res, "Reward not available", 400);
+    }
+
+    // 2) Check redemption caps
+    if (reward.max_redemptions !== null && reward.max_redemptions !== undefined) {
+      const totalUsed = await rewardRedemptionModel.countByRewardId(reward.id);
+      if (totalUsed >= reward.max_redemptions) {
+        return response.error(res, "Reward fully redeemed", 400);
+      }
+    }
+
+    if (reward.max_per_user !== null && reward.max_per_user !== undefined) {
+      const userUsed = await rewardRedemptionModel.countByRewardAndUser(reward.id, userId);
+      if (userUsed >= reward.max_per_user) {
+        return response.error(res, "Redemption limit reached for this user", 400);
+      }
+    }
+
+    // 3) Check user points
+    const currentPoints = await pointsTxnModel.getTotalPointsByUserId(userId);
+    if (currentPoints < reward.points_needed) {
+      return response.error(res, "Insufficient points", 400);
+    }
+
+    // 4) Create redemption
+    const promo_code = generatePromoCode(10);
+
+    const redemption = await rewardRedemptionModel.createRedemption({
+      reward_id: reward.id,
+      user_id: Number(userId),
+      promo_code,
+      redeemed_at: new Date(),
+    });
+
+    // 6) Create points transaction
+    await pointsTxnModel.createTxn({
+      user_id: Number(userId),
+      points: -Number(reward.points_needed),
+      type: "redeem",
+      redemption_id: redemption.id,
+      session_id: null,
+    });
+
+    return response.success(res, null, "Reward redeemed", 200);
+  } catch (err) {
+    console.error("redeemReward error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

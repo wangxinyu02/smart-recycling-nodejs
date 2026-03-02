@@ -121,10 +121,10 @@ exports.deleteUser = async (req, res) => {
       return response.error(res, "Forbidden", 403);
     }
 
-    const user = await userModel.getUserById(userId);
+    const user = await userModel.getExistingUserById(userId);
 
-    if (user.deleted_at) {
-      return response.error(res, "User not found or already deleted", 404);
+    if (!user) {
+      return response.error(res, "User not found", 404);
     }
 
     const deleted = await userModel.deleteUserById(userId);
