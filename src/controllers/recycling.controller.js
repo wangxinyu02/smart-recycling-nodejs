@@ -1,0 +1,399 @@
+// src/controllers/recycling.controller.js
+
+const crypto = require("crypto");
+const prisma = require("../config/prisma");
+const sessionModel = require("../models/recycling_session.model");
+const response = require("../utils/response.utils");
+const { calcCo2Saved } = require("../utils/co2.utils");
+
+exports.createSession = async (req, res) => {
+  try {
+    const session = await sessionModel.createSession();
+
+    return response.success(res, { id: session.id }, "Session created successfully", 201);
+  } catch (err) {
+    console.error("createSession error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.getSessionById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sessionId = Number(id);
+
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      return response.error(res, "Invalid session id", 400);
+    }
+
+    const session = await sessionModel.getSummaryById(sessionId);
+    if (!session) {
+      return response.error(res, "Session not found", 404);
+    }
+
+    if (req.user?.role !== "admin" && req.user?.id !== session.user_id) {
+      return response.error(res, "Forbidden", 403);
+    }
+
+    return response.success(res, session, "Session fetched successfully", 200);
+  } catch (err) {
+    console.error("getSessionById error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.listSessions = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return response.error(res, "Unauthorized", 401);
+    }
+
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    // Admin can list all or filter by user_id; normal user only sees own
+    const requestedUserId = req.query.user_id ? Number(req.query.user_id) : undefined;
+    const active_only = req.query.active_only === "true";
+
+    const effectiveUserId = req.user?.role === "admin" ? requestedUserId : userId;
+
+    const [items, total] = await Promise.all([
+      sessionModel.listSessions({
+        skip,
+        take: limit,
+        user_id: effectiveUserId,
+        active_only,
+      }),
+      sessionModel.countSessions({
+        user_id: effectiveUserId,
+        active_only,
+      }),
+    ]);
+
+    return response.success(
+      res,
+      {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit),
+        },
+      },
+      "Sessions retrieved",
+      200,
+    );
+  } catch (err) {
+    console.error("listSessions error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.endSession = async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      return response.error(res, "Invalid session id", 400);
+    }
+
+    const { breakdown } = req.body;
+    if (!Array.isArray(breakdown) || breakdown.length === 0) {
+      return response.error(res, "breakdown must be a non-empty array", 400);
+    }
+
+    const rows = breakdown
+      .map((r, idx) => {
+        const bin_id = Number(r?.bin_id);
+        const weight = toNumberOrNull(r?.weight);
+
+        if (!Number.isInteger(bin_id) || bin_id <= 0) {
+          const err = new Error(`Invalid bin_id at index ${idx}`);
+          err.statusCode = 400;
+          throw err;
+        }
+        if (weight === null || weight < 0) {
+          const err = new Error(`Invalid weight at index ${idx}`);
+          err.statusCode = 400;
+          throw err;
+        }
+
+        return { bin_id, weight };
+      })
+      .filter((r) => r.weight > 0);
+
+    if (rows.length === 0) {
+      return response.error(res, "All weights are 0", 400);
+    }
+
+    // ✅ Merge duplicate bin_id
+    const mergedMap = new Map();
+    for (const r of rows) {
+      mergedMap.set(r.bin_id, (mergedMap.get(r.bin_id) ?? 0) + r.weight);
+    }
+    const merged = Array.from(mergedMap.entries()).map(([bin_id, weight]) => ({
+      bin_id,
+      weight: Number(weight.toFixed(2)),
+    }));
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ✅ Validate session inside tx
+      const session = await tx.recyclingSession.findUnique({
+        where: { id: sessionId },
+        select: { id: true, ended_at: true },
+      });
+
+      if (!session) {
+        const err = new Error("Session not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      if (session.ended_at) {
+        const err = new Error("Session already ended");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // ✅ Load bins
+      const binIds = merged.map((x) => x.bin_id);
+      const bins = await tx.bin.findMany({
+        where: { id: { in: binIds } },
+        select: { id: true, material: true },
+      });
+
+      const binMap = new Map(bins.map((b) => [b.id, b]));
+
+      for (const bid of binIds) {
+        if (!binMap.has(bid)) {
+          const err = new Error(`Bin not found: ${bid}`);
+          err.statusCode = 404;
+          throw err;
+        }
+      }
+
+      let totalWeight = 0;
+      let totalCo2 = 0;
+
+      // ✅ Create items
+      for (const row of merged) {
+        const material = binMap.get(row.bin_id).material;
+        const co2 = calcCo2Saved(material, row.weight);
+
+        totalWeight += row.weight;
+        totalCo2 += co2;
+
+        await tx.recyclingItem.create({
+          data: {
+            session_id: sessionId,
+            bin_id: row.bin_id,
+            material,
+            weight: row.weight.toFixed(2),
+            co2_saved: co2.toFixed(2),
+          },
+        });
+      }
+
+      // ✅ End session + save total_co2
+      await tx.recyclingSession.update({
+        where: { id: sessionId },
+        data: {
+          total_co2: totalCo2.toFixed(2),
+          ended_at: new Date(),
+        },
+      });
+
+      const qr_payload = generateQrPayload(sessionId);
+
+      return {
+        id: sessionId,
+        qr_payload,
+      };
+    });
+
+    return response.success(res, result, "Session ended successfully", 200);
+  } catch (err) {
+    console.error("endSession error:", err);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
+function toNumberOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function generateQrPayload(sessionId) {
+  const ts = Date.now();
+  const nonce = crypto.randomBytes(8).toString("hex");
+  const data = `${sessionId}|${ts}|${nonce}`;
+  const secret = process.env.QR_SECRET;
+
+  const sig = crypto.createHmac("sha256", secret).update(data).digest("hex");
+
+  return `sid=${sessionId}&ts=${ts}&nonce=${nonce}&sig=${sig}`;
+}
+
+const QR_SECRET = process.env.QR_SECRET || "change-me";
+const QR_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+function signQr({ sid, ts, nonce }) {
+  const msg = `${sid}|${ts}|${nonce}`;
+  return crypto.createHmac("sha256", QR_SECRET).update(msg).digest("hex");
+}
+
+function parseQrPayload(payload) {
+  // expects: sid=123&ts=1710000000000&nonce=abc&sig=....
+  const params = new URLSearchParams(String(payload));
+  const sid = params.get("sid");
+  const ts = params.get("ts");
+  const nonce = params.get("nonce");
+  const sig = params.get("sig");
+  return { sid, ts, nonce, sig };
+}
+
+function verifyQrPayload(payload) {
+  const { sid, ts, nonce, sig } = parseQrPayload(payload);
+
+  const sidNum = Number(sid);
+  const tsNum = Number(ts);
+
+  if (!Number.isInteger(sidNum) || sidNum <= 0) return { ok: false, reason: "INVALID_SID" };
+  if (!Number.isFinite(tsNum) || tsNum <= 0) return { ok: false, reason: "INVALID_TS" };
+  if (!nonce || typeof nonce !== "string" || nonce.length < 6) return { ok: false, reason: "INVALID_NONCE" };
+  if (!sig || typeof sig !== "string") return { ok: false, reason: "INVALID_SIG" };
+
+  const age = Date.now() - tsNum;
+  if (age < 0 || age > QR_MAX_AGE_MS) return { ok: false, reason: "QR_EXPIRED" };
+
+  const expected = signQr({ sid: sidNum, ts: tsNum, nonce });
+  if (!safeEqual(sig, expected)) return { ok: false, reason: "BAD_SIGNATURE" };
+
+  return { ok: true, session_id: sidNum };
+}
+
+function computeEarnPoints(total_co2) {
+  const co2 = Number(total_co2 ?? 0);
+  const points = Math.ceil(co2); // ceiling rule
+  return Math.max(1, points); // guarantee minimum 1 point
+}
+
+exports.claimSession = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    const { qr_payload } = req.body;
+    if (!qr_payload || typeof qr_payload !== "string") {
+      return response.error(res, "qr_payload is required", 400);
+    }
+
+    const v = verifyQrPayload(qr_payload);
+    if (!v.ok) {
+      return response.error(res, `Invalid QR (${v.reason})`, 400);
+    }
+
+    const sessionId = v.session_id;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Load session
+      const session = await tx.recyclingSession.findUnique({
+        where: { id: sessionId },
+        select: {
+          id: true,
+          user_id: true,
+          started_at: true,
+          ended_at: true,
+          claimed_at: true,
+          total_co2: true,
+        },
+      });
+
+      if (!session) {
+        const err = new Error("Session not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // 2) Must be ended
+      if (!session.ended_at) {
+        const err = new Error("Session not ended yet");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // 3) Must not be claimed
+      if (session.claimed_at || session.user_id) {
+        const err = new Error("Session already claimed");
+        err.statusCode = 409;
+        throw err;
+      }
+
+      // 4) Attach to user
+      await tx.recyclingSession.update({
+        where: { id: sessionId },
+        data: {
+          user_id: Number(userId),
+          claimed_at: new Date(),
+        },
+      });
+
+      // 5) Create earn points
+      const existingEarn = await tx.pointsTransaction.findFirst({
+        where: { session_id: sessionId, type: "earn" },
+        select: { id: true },
+      });
+
+      let pointsEarned = 0;
+
+      if (!existingEarn) {
+        pointsEarned = computeEarnPoints(session.total_co2);
+
+        await tx.pointsTransaction.create({
+          data: {
+            user_id: Number(userId),
+            points: Number(pointsEarned),
+            type: "earn",
+            session_id: sessionId,
+            redemption_id: null,
+          },
+        });
+      } else {
+        // already earned (shouldn't happen if claim is locked properly, but safe)
+        const sum = await tx.pointsTransaction.aggregate({
+          where: { session_id: sessionId, type: "earn" },
+          _sum: { points: true },
+        });
+        pointsEarned = sum._sum.points ?? 0;
+      }
+
+      return { pointsEarned };
+    });
+
+    // 6) Return summary for screen
+    const summary = await sessionModel.getSummaryById(sessionId);
+    if (!summary) return response.error(res, "Session not found", 404);
+
+    // overwrite points_earned from transaction result (source of truth)
+    summary.points_earned = result.pointsEarned;
+
+    const message = {
+      headline: `You helped reduce ${summary.session.total_co2}kg of CO2 - `,
+      description: `equiavalent to 4 trees absorbing carbon in one day!`,
+    };
+
+    return response.success(res, { ...summary, message }, "Session claimed successfully", 200);
+  } catch (err) {
+    console.error("claimSession error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
