@@ -193,42 +193,39 @@ exports.getHome = async (req, res) => {
     const thisMonthWeight = toNum(thisMonthAgg._sum.weight);
     const lastMonthWeight = toNum(lastMonthAgg._sum.weight);
 
-    let trend = "neutral";
+    let trend = "";
     let percent = 0;
 
     if (lastMonthWeight === 0 && thisMonthWeight > 0) {
-      trend = "up";
+      trend = "↑";
       percent = 100; // “new activity” → show 100% (you can also choose 0 or null)
     } else if (lastMonthWeight > 0) {
       const change = ((thisMonthWeight - lastMonthWeight) / lastMonthWeight) * 100;
       percent = round0(Math.abs(change));
-      if (change > 0) trend = "up";
-      else if (change < 0) trend = "down";
-      else trend = "neutral";
+      if (change > 0) trend = "↑";
+      else if (change < 0) trend = "↓";
+      else trend = "";
     } else {
-      trend = "neutral";
+      trend = "";
       percent = 0;
     }
 
-    // 3) CO2 equivalency message
-
-    // 4) Headline/description depends on participation rate
+    // 3) Headline/description depends on participation rate
     const heroMessage = buildParticipationMessage(trend, percent);
 
     const data = {
       total_weight_recycled: {
-        number: `${round1(totalWeight)}kg`, // e.g., 10.0
+        label: `${round1(totalWeight)}kg`, // e.g., 10.0
       },
       total_co2_emission_saved: {
-        number: `${round1(totalCo2)}kg CO₂`, // e.g., 2.4
+        label: `${round1(totalCo2)}kg CO₂`, // e.g., 2.4
         message: buildCo2ImpactMessage(round1(totalCo2), userId).text,
       },
       participation_rate: {
-        trend, // "up" | "down" | "neutral"
-        number: percent, // 50 means 50%
+        label: `${trend} ${percent}%`, // 50 means 50%
         message: "compared to last month",
       },
-      message: heroMessage,
+      encouragement: heroMessage,
     };
 
     return response.success(res, data, "Home data retrieved", 200);

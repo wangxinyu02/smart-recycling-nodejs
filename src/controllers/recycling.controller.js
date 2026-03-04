@@ -221,7 +221,6 @@ exports.endSession = async (req, res) => {
   }
 };
 
-
 function generateQrPayload(sessionId) {
   const ts = Date.now();
   const nonce = crypto.randomBytes(8).toString("hex");
@@ -382,12 +381,12 @@ exports.claimSession = async (req, res) => {
     // overwrite points_earned from transaction result (source of truth)
     summary.points_earned = result.pointsEarned;
 
-    const message = {
+    const impact_message = {
       headline: `You helped reduce ${summary.session.total_co2}kg of CO₂ ✅`,
       description: buildCo2ImpactMessage(summary.session.total_co2).text,
     };
 
-    return response.success(res, { ...summary, message }, "Session claimed successfully", 200);
+    return response.success(res, { ...summary, impact_message }, "Session claimed successfully", 200);
   } catch (err) {
     console.error("claimSession error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
