@@ -2,6 +2,11 @@
 
 const userModel = require("../models/user.model");
 const response = require("../utils/response.utils");
+const prisma = require("../config/prisma");
+const { buildParticipationMessage } = require("../utils/participation_rate.utils");
+const { buildCo2ImpactMessage } = require("../utils/co2.utils");
+const { toNum, round0, round1 } = require("../utils/number.utils");
+const { startOfMonthUTC, addMonthsUTC } = require("../utils/date.utils");
 
 exports.getUsers = async (req, res) => {
   try {
@@ -132,6 +137,103 @@ exports.deleteUser = async (req, res) => {
     return response.success(res, deleted, "User deleted successfully", 200);
   } catch (err) {
     console.error("deleteUser error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.getHome = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    // Time windows (UTC month boundaries)
+    const now = new Date();
+    const thisMonthStart = startOfMonthUTC(now);
+    const nextMonthStart = addMonthsUTC(thisMonthStart, 1);
+    const lastMonthStart = addMonthsUTC(thisMonthStart, -1);
+
+    // 1) All-time totals (only count ended sessions via relation filter)
+    const totalsAgg = await prisma.recyclingItem.aggregate({
+      where: {
+        session: {
+          user_id: userId,
+          ended_at: { not: null },
+        },
+      },
+      _sum: {
+        weight: true,
+        co2_saved: true,
+      },
+    });
+
+    const totalWeight = toNum(totalsAgg._sum.weight);
+    const totalCo2 = toNum(totalsAgg._sum.co2_saved);
+
+    // 2) Month-over-month participation (use total recycled weight as “participation”)
+    const [thisMonthAgg, lastMonthAgg] = await Promise.all([
+      prisma.recyclingItem.aggregate({
+        where: {
+          session: {
+            user_id: userId,
+            ended_at: { gte: thisMonthStart, lt: nextMonthStart },
+          },
+        },
+        _sum: { weight: true },
+      }),
+      prisma.recyclingItem.aggregate({
+        where: {
+          session: {
+            user_id: userId,
+            ended_at: { gte: lastMonthStart, lt: thisMonthStart },
+          },
+        },
+        _sum: { weight: true },
+      }),
+    ]);
+
+    const thisMonthWeight = toNum(thisMonthAgg._sum.weight);
+    const lastMonthWeight = toNum(lastMonthAgg._sum.weight);
+
+    let trend = "neutral";
+    let percent = 0;
+
+    if (lastMonthWeight === 0 && thisMonthWeight > 0) {
+      trend = "up";
+      percent = 100; // “new activity” → show 100% (you can also choose 0 or null)
+    } else if (lastMonthWeight > 0) {
+      const change = ((thisMonthWeight - lastMonthWeight) / lastMonthWeight) * 100;
+      percent = round0(Math.abs(change));
+      if (change > 0) trend = "up";
+      else if (change < 0) trend = "down";
+      else trend = "neutral";
+    } else {
+      trend = "neutral";
+      percent = 0;
+    }
+
+    // 3) CO2 equivalency message
+
+    // 4) Headline/description depends on participation rate
+    const heroMessage = buildParticipationMessage(trend, percent);
+
+    const data = {
+      total_weight_recycled: {
+        number: `${round1(totalWeight)}kg`, // e.g., 10.0
+      },
+      total_co2_emission_saved: {
+        number: `${round1(totalCo2)}kg CO₂`, // e.g., 2.4
+        message: buildCo2ImpactMessage(round1(totalCo2), userId).text,
+      },
+      participation_rate: {
+        trend, // "up" | "down" | "neutral"
+        number: percent, // 50 means 50%
+        message: "compared to last month",
+      },
+      message: heroMessage,
+    };
+
+    return response.success(res, data, "Home data retrieved", 200);
+  } catch (err) {
+    console.error("getHome error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

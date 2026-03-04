@@ -4,7 +4,8 @@ const crypto = require("crypto");
 const prisma = require("../config/prisma");
 const sessionModel = require("../models/recycling_session.model");
 const response = require("../utils/response.utils");
-const { calcCo2Saved } = require("../utils/co2.utils");
+const { calcCo2Saved, buildCo2ImpactMessage } = require("../utils/co2.utils");
+const { toNumberOrNull } = require("../utils/number.utils");
 
 exports.createSession = async (req, res) => {
   try {
@@ -220,11 +221,6 @@ exports.endSession = async (req, res) => {
   }
 };
 
-function toNumberOrNull(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
 
 function generateQrPayload(sessionId) {
   const ts = Date.now();
@@ -387,8 +383,8 @@ exports.claimSession = async (req, res) => {
     summary.points_earned = result.pointsEarned;
 
     const message = {
-      headline: `You helped reduce ${summary.session.total_co2}kg of CO2 - `,
-      description: `equiavalent to 4 trees absorbing carbon in one day!`,
+      headline: `You helped reduce ${summary.session.total_co2}kg of CO₂ ✅`,
+      description: buildCo2ImpactMessage(summary.session.total_co2).text,
     };
 
     return response.success(res, { ...summary, message }, "Session claimed successfully", 200);
