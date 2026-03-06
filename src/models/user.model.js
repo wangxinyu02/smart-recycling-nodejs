@@ -135,6 +135,18 @@ module.exports = {
     });
   },
 
+  updatePasswordById: (id, password_hash) => {
+    return prisma.user.update({
+      where: { id, deleted_at: null },
+      data: { password_hash },
+      select: {
+        id: true,
+        email: true,
+        updated_at: true,
+      },
+    });
+  },
+
   checkEmailExists: (email) => {
     return prisma.user.findFirst({
       where: { email: email, deleted_at: null },

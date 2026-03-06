@@ -175,3 +175,27 @@ exports.verifyPassword = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return response.error(res, "Unauthorized", 401);
+    }
+    const { password } = req.body;
+
+    if (!password) {
+      return response.error(res, "Password is required", 400);
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    await userModel.updatePasswordById(userId, hashed);
+
+    return response.success(res, null, "Password changed successful", 200);
+  } catch (err) {
+    console.error("changePassword error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
