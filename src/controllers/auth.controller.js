@@ -142,3 +142,36 @@ exports.checkEmailAvailability = async (req, res) => {
     return response.error(res, "Internal Server Error", 500);
   }
 };
+
+exports.verifyPassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return response.error(res, "Unauthorized", 401);
+    }
+
+    const { password } = req.body;
+
+    if (!password) {
+      return response.error(res, "Password is required", 400);
+    }
+
+    const user = await userModel.getUserPasswordById(userId);
+
+    if (!user) {
+      return response.error(res, "User not found", 404);
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+
+    if (!match) {
+      return response.error(res, "Incorrect password", 401);
+    }
+
+    return response.success(res, null, "Password verified", 200);
+  } catch (err) {
+    console.error("verifyPassword error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};

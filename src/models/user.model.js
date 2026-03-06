@@ -141,4 +141,14 @@ module.exports = {
       select: { id: true }, // only check existence
     });
   },
+
+  getUserPasswordById: (id) => {
+    return prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: {
+        id: true,
+        password_hash: true,
+      },
+    });
+  },
 };
