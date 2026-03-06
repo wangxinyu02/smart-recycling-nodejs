@@ -15,6 +15,8 @@ module.exports = {
         password_hash: true,
         role: true,
         created_at: true,
+        updated_at: true,
+        deleted_at: true,
       },
     }),
 

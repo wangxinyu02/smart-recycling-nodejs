@@ -134,7 +134,7 @@ exports.deleteUser = async (req, res) => {
 
     const deleted = await userModel.deleteUserById(userId);
 
-    return response.success(res, deleted, "User deleted successfully", 200);
+    return response.success(res, deleted, "Account deleted successfully", 200);
   } catch (err) {
     console.error("deleteUser error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);

@@ -166,7 +166,7 @@ exports.verifyPassword = async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
 
     if (!match) {
-      return response.error(res, "Incorrect password", 401);
+      return response.error(res, "Incorrect password. Please try again.", 401);
     }
 
     return response.success(res, null, "Password verified", 200);
