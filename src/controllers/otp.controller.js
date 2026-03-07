@@ -30,7 +30,7 @@ exports.sendOtp = async (req, res) => {
     }
 
     if (purpose === "reset" && !existingUser) {
-      return response.error(res, "User not found", 404);
+       return response.success(res, null, "If account exists, OTP sent", 200);
     }
 
     // ✅ resend cooldown

@@ -263,16 +263,16 @@ function verifyQrPayload(payload) {
   const sidNum = Number(sid);
   const tsNum = Number(ts);
 
-  if (!Number.isInteger(sidNum) || sidNum <= 0) return { ok: false, reason: "INVALID_SID" };
-  if (!Number.isFinite(tsNum) || tsNum <= 0) return { ok: false, reason: "INVALID_TS" };
-  if (!nonce || typeof nonce !== "string" || nonce.length < 6) return { ok: false, reason: "INVALID_NONCE" };
-  if (!sig || typeof sig !== "string") return { ok: false, reason: "INVALID_SIG" };
+  if (!Number.isInteger(sidNum) || sidNum <= 0) return { ok: false, reason: "QR code is invalid. Please try again." };
+  if (!Number.isFinite(tsNum) || tsNum <= 0) return { ok: false, reason: "QR code is invalid. Please try again." };
+  if (!nonce || typeof nonce !== "string" || nonce.length < 6) return { ok: false, reason: "QR code is invalid. Please try again." };
+  if (!sig || typeof sig !== "string") return { ok: false, reason: "QR code is invalid. Please try again." };
 
   const age = Date.now() - tsNum;
-  if (age < 0 || age > QR_MAX_AGE_MS) return { ok: false, reason: "QR_EXPIRED" };
+  if (age < 0 || age > QR_MAX_AGE_MS) return { ok: false, reason: "QR code is expired. Please try again." };
 
   const expected = signQr({ sid: sidNum, ts: tsNum, nonce });
-  if (!safeEqual(sig, expected)) return { ok: false, reason: "BAD_SIGNATURE" };
+  if (!safeEqual(sig, expected)) return { ok: false, reason: "QR code is invalid. Please try again." };
 
   return { ok: true, session_id: sidNum };
 }
@@ -294,7 +294,7 @@ exports.claimSession = async (req, res) => {
 
     const v = verifyQrPayload(qr_payload);
     if (!v.ok) {
-      return response.error(res, `Invalid QR (${v.reason})`, 400);
+      return response.error(res, `${v.reason}`, 400);
     }
 
     const sessionId = v.session_id;
@@ -314,21 +314,21 @@ exports.claimSession = async (req, res) => {
       });
 
       if (!session) {
-        const err = new Error("Session not found");
+        const err = new Error("Session not found.");
         err.statusCode = 404;
         throw err;
       }
 
       // 2) Must be ended
       if (!session.ended_at) {
-        const err = new Error("Session not ended yet");
+        const err = new Error("Session not ended yet.");
         err.statusCode = 400;
         throw err;
       }
 
       // 3) Must not be claimed
       if (session.claimed_at || session.user_id) {
-        const err = new Error("Session already claimed");
+        const err = new Error("Session already claimed.");
         err.statusCode = 409;
         throw err;
       }
@@ -389,6 +389,6 @@ exports.claimSession = async (req, res) => {
     return response.success(res, { ...summary, impact_message }, "Session claimed successfully", 200);
   } catch (err) {
     console.error("claimSession error:", err);
-    return response.error(res, "Internal Server Error", 500, err.message);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
   }
 };
