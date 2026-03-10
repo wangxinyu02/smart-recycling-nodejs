@@ -18,6 +18,16 @@ const selectReward = {
   deleted_at: true,
 };
 
+const selectRewardWithMerchant = {
+  ...selectReward,
+  merchant: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+};
+
 module.exports = {
   createReward: (data) => {
     return prisma.reward.create({
@@ -33,7 +43,7 @@ module.exports = {
     });
   },
 
-  listRewards: ({ skip = 0, take = 20, q = "", merchant_id, status }) => {
+  listRewards: ({ skip = 0, take = 20, q = "", merchant_id, status, filter = "all", user_id }) => {
     const keyword = q?.trim();
 
     const where = {
@@ -42,21 +52,56 @@ module.exports = {
       ...(status ? { status } : {}),
       ...(keyword
         ? {
-            OR: [
-              { name: { contains: keyword } },
-              { description: { contains: keyword } },
-            ],
+            OR: [{ name: { contains: keyword } }, { description: { contains: keyword } }],
+          }
+        : {}),
+      ...(filter === "redeemed" && user_id
+        ? {
+            redemptions: {
+              some: {
+                user_id: Number(user_id),
+                // used_at: null,
+              },
+            },
+          }
+        : {}),
+      ...(filter === "used" && user_id
+        ? {
+            redemptions: {
+              some: {
+                user_id: Number(user_id),
+                used_at: { not: null },
+              },
+            },
+          }
+        : {}),
+      ...(filter === "expired" && user_id
+        ? {
+            redemptions: {
+              some: {
+                user_id: Number(user_id),
+                used_at: null,
+              },
+            },
           }
         : {}),
     };
 
-    return prisma.reward.findMany({
-      where,
-      skip,
-      take,
-      select: selectReward,
-      orderBy: { created_at: "desc" },
-    });
+    return prisma.reward
+      .findMany({
+        where,
+        skip,
+        take,
+        select: selectRewardWithMerchant,
+        orderBy: { created_at: "desc" },
+      })
+      .then((rows) =>
+        rows.map((r) => ({
+          ...r,
+          merchant_name: r.merchant?.name ?? null,
+          merchant: undefined,
+        })),
+      );
   },
 
   countRewards: ({ q = "", merchant_id, status }) => {
@@ -68,10 +113,7 @@ module.exports = {
       ...(status ? { status } : {}),
       ...(keyword
         ? {
-            OR: [
-              { name: { contains: keyword } },
-              { description: { contains: keyword } },
-            ],
+            OR: [{ name: { contains: keyword } }, { description: { contains: keyword } }],
           }
         : {}),
     };

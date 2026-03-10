@@ -106,17 +106,40 @@ exports.listRewards = async (req, res) => {
     const q = req.query.q ? String(req.query.q) : "";
 
     const merchant_id = req.query.merchant_id ? Number(req.query.merchant_id) : undefined;
-    const status = req.query.status ? String(req.query.status) : undefined;
+    const filter = req.query.filter ? String(req.query.filter) : "all";
+    let status = req.query.status ? String(req.query.status) : undefined;
+
+    if (!["all", "redeemed", "used", "expired"].includes(filter)) {
+      return response.error(res, "Invalid filter", 400);
+    }
 
     if (status && !["active", "inactive"].includes(status)) {
       return response.error(res, "Invalid status filter", 400);
     }
 
+    if (req.user.role === "user") {
+      status = "active";
+    }
+
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      rewardModel.listRewards({ skip, take: limit, q, merchant_id, status }),
-      rewardModel.countRewards({ q, merchant_id, status }),
+      rewardModel.listRewards({
+        skip,
+        take: limit,
+        q,
+        merchant_id,
+        status,
+        filter,
+        user_id: req.user.id,
+      }),
+      rewardModel.countRewards({
+        q,
+        merchant_id,
+        status,
+        filter,
+        user_id: req.user.id,
+      }),
     ]);
 
     return response.success(
@@ -131,7 +154,7 @@ exports.listRewards = async (req, res) => {
         },
       },
       "Rewards retrieved",
-      200
+      200,
     );
   } catch (err) {
     console.error("listRewards error:", err);

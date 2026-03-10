@@ -39,7 +39,7 @@ exports.getUserById = async (req, res) => {
       return response.error(res, "User not found", 404);
     }
 
-    return response.success(res, { user }, "User fetched successfully", 201);
+    return response.success(res, { user }, "User fetched successfully", 200);
   } catch (err) {
     console.error("getUserById Error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
@@ -218,7 +218,7 @@ exports.getHome = async (req, res) => {
         label: `${round1(totalWeight)}kg`, // e.g., 10.0
       },
       total_co2_emission_saved: {
-        label: `${round1(totalCo2)}kg CO₂`, // e.g., 2.4
+        label: `${round1(totalCo2)}kg`, // e.g., 2.4
         message: buildCo2ImpactMessage(round1(totalCo2), userId).text,
       },
       participation_rate: {
