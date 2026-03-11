@@ -26,6 +26,13 @@ module.exports = {
     });
   },
 
+  hasRedemptions: async (reward_id) => {
+    const count = await prisma.rewardRedemption.count({
+      where: { reward_id: Number(reward_id) },
+    });
+    return count > 0;
+  },
+
   createRedemption: (data) => {
     return prisma.rewardRedemption.create({
       data,

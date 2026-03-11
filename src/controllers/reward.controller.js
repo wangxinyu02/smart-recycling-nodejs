@@ -271,6 +271,11 @@ exports.deleteReward = async (req, res) => {
       return response.error(res, "Reward not found", 404);
     }
 
+    const hasRedemption = await rewardRedemptionModel.hasRedemptions(id);
+    if (hasRedemption) {
+      return response.error(res, "Reward cannot be deleted because it has already been redeemed by user(s)", 409);
+    }
+
     const deleted = await rewardModel.softDeleteRewardById(id);
     return response.success(res, deleted, "Reward deleted", 200);
   } catch (err) {
