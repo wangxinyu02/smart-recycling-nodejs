@@ -6,6 +6,7 @@ const sessionModel = require("../models/recycling_session.model");
 const response = require("../utils/response.utils");
 const { calcCo2Saved, buildCo2ImpactMessage } = require("../utils/co2.utils");
 const { toNumberOrNull } = require("../utils/number.utils");
+const { capitalizeFirstLetter } = require("../utils/string.utils");
 
 exports.createSession = async (req, res) => {
   try {
@@ -390,5 +391,107 @@ exports.claimSession = async (req, res) => {
   } catch (err) {
     console.error("claimSession error:", err);
     return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
+exports.getTopRecycledMaterial = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    const currentYear = new Date().getFullYear();
+    const year = req.query.year ? Number(req.query.year) : currentYear;
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return response.error(res, "Unauthorized", 401);
+    }
+
+    if (!Number.isInteger(year) || year < 2000 || year > 9999) {
+      return response.error(res, "Invalid year", 400);
+    }
+
+    const sessionWhere = {
+      claimed_at: {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),
+      },
+    };
+
+    // user only sees own data
+    if (role !== "admin") {
+      sessionWhere.user_id = Number(userId);
+    }
+
+    // optional year filter
+    if (year !== null) {
+      sessionWhere.claimed_at = {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),
+      };
+    }
+
+    const grouped = await prisma.recyclingItem.groupBy({
+      by: ["material"],
+      where: {
+        session: sessionWhere,
+      },
+      _sum: {
+        weight: true,
+      },
+      orderBy: {
+        _sum: {
+          weight: "desc",
+        },
+      },
+    });
+
+    if (!grouped.length) {
+      return response.success(
+        res,
+        {
+          top_material: null,
+          summary: "No recycled material data found.",
+          filter: {
+            year,
+            scope: role === "admin" ? "all_users" : "own",
+          },
+          materials: [],
+        },
+        "Top recycled material fetched successfully",
+        200,
+      );
+    }
+
+    const materialsWithWeight = grouped.map((item) => ({
+      name: capitalizeFirstLetter(item.material),
+      weight_kg: Number(Number(item._sum.weight || 0).toFixed(1)),
+    }));
+
+    const totalWeight = materialsWithWeight.reduce((sum, item) => sum + item.weight_kg, 0);
+
+    const materials = materialsWithWeight.map((item) => ({
+      name: item.name,
+      value: item.weight_kg,
+      title: `${item.name} \n ${totalWeight > 0 ? Number(((item.weight_kg / totalWeight) * 100).toFixed(1)) : 0}%`,
+    }));
+
+    const topMaterial = materials[0];
+
+    return response.success(
+      res,
+      {
+        summary: capitalizeFirstLetter(topMaterial.name),
+        filter: {
+          year,
+          scope: role === "admin" ? "all_users" : "own",
+        },
+        materials,
+      },
+      "Top recycled material fetched successfully",
+      200,
+    );
+  } catch (err) {
+    console.error("getTopRecycledMaterial error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
