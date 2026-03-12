@@ -7,6 +7,7 @@ const response = require("../utils/response.utils");
 const { calcCo2Saved, buildCo2ImpactMessage } = require("../utils/co2.utils");
 const { toNumberOrNull } = require("../utils/number.utils");
 const { capitalizeFirstLetter } = require("../utils/string.utils");
+const { MATERIALS } = require("../config/material.config");
 
 exports.createSession = async (req, res) => {
   try {
@@ -492,6 +493,115 @@ exports.getTopRecycledMaterial = async (req, res) => {
     );
   } catch (err) {
     console.error("getTopRecycledMaterial error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+
+exports.getRecyclableWeightOverTime = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    const currentYear = new Date().getFullYear();
+    const year = req.query.year ? Number(req.query.year) : currentYear;
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return response.error(res, "Unauthorized", 401);
+    }
+
+    if (!Number.isInteger(year) || year < 2000 || year > 9999) {
+      return response.error(res, "Invalid year", 400);
+    }
+
+    const sessionWhere = {
+      claimed_at: {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),
+      },
+    };
+
+    if (role !== "admin") {
+      sessionWhere.user_id = Number(userId);
+    }
+
+    const grouped = await prisma.recyclingItem.groupBy({
+      by: ["material", "created_at"],
+      where: {
+        session: sessionWhere,
+      },
+      _sum: {
+        weight: true,
+      },
+      orderBy: [{ created_at: "asc" }, { material: "asc" }],
+    });
+
+    // ✅ Legend based on config
+    const legend = MATERIALS.map((material) => ({
+      key: material,
+      label: capitalizeFirstLetter(material),
+    }));
+
+    const monthLabels = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+
+    const monthMap = new Map();
+
+    for (let i = 1; i <= 12; i += 1) {
+      monthMap.set(i, {
+        x: i - 1,
+        month: i,
+        label: monthLabels[i - 1],
+        value: 0,
+        materials: MATERIALS.map((material) => ({
+          key: material,
+          value: 0,
+        })),
+      });
+    }
+
+    for (const row of grouped) {
+      const materialKey = String(row.material || "").toLowerCase();
+      const date = new Date(row.created_at);
+      const month = date.getUTCMonth() + 1;
+
+      if (!monthMap.has(month)) continue;
+
+      const monthEntry = monthMap.get(month);
+      const weight = Number(Number(row._sum.weight || 0).toFixed(1));
+
+      const materialIndex = monthEntry.materials.findIndex(
+        (item) => item.key === materialKey
+      );
+
+      if (materialIndex >= 0) {
+        monthEntry.materials[materialIndex].value = Number(
+          (monthEntry.materials[materialIndex].value + weight).toFixed(1)
+        );
+      }
+
+      monthEntry.value = Number((monthEntry.value + weight).toFixed(1));
+    }
+
+    const months = Array.from(monthMap.values());
+
+    return response.success(
+      res,
+      {
+        filter: {
+          year,
+          scope: role === "admin" ? "all_users" : "own",
+        },
+        legend,
+        months,
+      },
+      "Recyclable weight over time fetched successfully",
+      200,
+    );
+  } catch (err) {
+    console.error("getRecyclableWeightOverTime error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

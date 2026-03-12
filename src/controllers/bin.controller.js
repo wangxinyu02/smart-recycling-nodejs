@@ -2,16 +2,15 @@
 
 const binModel = require("../models/bin.model");
 const response = require("../utils/response.utils");
-
-const ALLOWED_MATERIALS = ["plastic", "paper", "metal", "glass", "ewaste", "other"];
+const { MATERIALS } = require("../config/material.config");
 
 exports.createBin = async (req, res) => {
   try {
     const { name, material } = req.body;
 
     if (!material) return response.error(res, "material is required", 400);
-    if (!ALLOWED_MATERIALS.includes(String(material))) {
-      return response.error(res, `Invalid material. Allowed: ${ALLOWED_MATERIALS.join(", ")}`, 400);
+    if (!MATERIALS.includes(String(material))) {
+      return response.error(res, `Invalid material. Allowed: ${MATERIALS.join(", ")}`, 400);
     }
 
     let cleanName = null;
@@ -62,12 +61,12 @@ exports.listBins = async (req, res) => {
     const q = req.query.q ? String(req.query.q) : "";
     const material = req.query.material ? String(req.query.material) : undefined;
 
-    if (material && !ALLOWED_MATERIALS.includes(material)) {
-      return response.error(res, `Invalid material filter. Allowed: ${ALLOWED_MATERIALS.join(", ")}`, 400);
+    if (material && !MATERIALS.includes(material)) {
+      return response.error(res, `Invalid material filter. Allowed: ${MATERIALS.join(", ")}`, 400);
     }
 
     const [items, total] = await Promise.all([
-      binModel.listBins({ skip, take: limit, q, material }),
+      binModel.listBins({ skip, take: limit, q, material }), 
       binModel.countBins({ q, material }),
     ]);
 
@@ -118,8 +117,8 @@ exports.updateBin = async (req, res) => {
     }
 
     if (material !== undefined) {
-      if (!ALLOWED_MATERIALS.includes(String(material))) {
-        return response.error(res, `Invalid material. Allowed: ${ALLOWED_MATERIALS.join(", ")}`, 400);
+      if (!MATERIALS.includes(String(material))) {
+        return response.error(res, `Invalid material. Allowed: ${MATERIALS.join(", ")}`, 400);
       }
       data.material = String(material);
     }
