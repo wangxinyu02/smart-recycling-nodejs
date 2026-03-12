@@ -75,10 +75,23 @@ exports.listSessions = async (req, res) => {
       }),
     ]);
 
+    // ✅ Add impact_message to each item
+    const itemsWithImpact = items.map((session) => {
+      const totalCo2 = session.total_co2 || 0;
+
+      return {
+        ...session,
+        impact_message: {
+          headline: `You helped reduce ${totalCo2}kg of CO₂ ✅`,
+          description: buildCo2ImpactMessage(totalCo2).text,
+        },
+      };
+    });
+
     return response.success(
       res,
       {
-        items,
+        items: itemsWithImpact,
         pagination: {
           page,
           limit,
@@ -497,7 +510,6 @@ exports.getTopRecycledMaterial = async (req, res) => {
   }
 };
 
-
 exports.getRecyclableWeightOverTime = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -542,10 +554,7 @@ exports.getRecyclableWeightOverTime = async (req, res) => {
       label: capitalizeFirstLetter(material),
     }));
 
-    const monthLabels = [
-      "Jan","Feb","Mar","Apr","May","Jun",
-      "Jul","Aug","Sep","Oct","Nov","Dec"
-    ];
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     const monthMap = new Map();
 
@@ -572,14 +581,10 @@ exports.getRecyclableWeightOverTime = async (req, res) => {
       const monthEntry = monthMap.get(month);
       const weight = Number(Number(row._sum.weight || 0).toFixed(1));
 
-      const materialIndex = monthEntry.materials.findIndex(
-        (item) => item.key === materialKey
-      );
+      const materialIndex = monthEntry.materials.findIndex((item) => item.key === materialKey);
 
       if (materialIndex >= 0) {
-        monthEntry.materials[materialIndex].value = Number(
-          (monthEntry.materials[materialIndex].value + weight).toFixed(1)
-        );
+        monthEntry.materials[materialIndex].value = Number((monthEntry.materials[materialIndex].value + weight).toFixed(1));
       }
 
       monthEntry.value = Number((monthEntry.value + weight).toFixed(1));
