@@ -234,3 +234,178 @@ exports.getHome = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
+
+exports.getAdminHome = async (req, res) => {
+  try {
+    const now = new Date();
+
+    // UTC month boundaries
+    const thisMonthStart = startOfMonthUTC(now);
+    const nextMonthStart = addMonthsUTC(thisMonthStart, 1);
+    const lastMonthStart = addMonthsUTC(thisMonthStart, -1);
+
+    // 1) All-time totals
+    const [
+      totalsAgg,
+      totalMerchants,
+      totalUsers,
+      thisMonthItemsAgg,
+      lastMonthItemsAgg,
+      thisMonthUsersCount,
+      lastMonthUsersCount,
+      thisMonthMerchantsCount,
+      lastMonthMerchantsCount,
+    ] = await Promise.all([
+      prisma.recyclingItem.aggregate({
+        where: {
+          session: {
+            ended_at: { not: null },
+          },
+        },
+        _sum: {
+          weight: true,
+          co2_saved: true,
+        },
+      }),
+
+      prisma.merchant.count(),
+
+      prisma.user.count({
+        where: {
+          role: "user",
+        },
+      }),
+
+      prisma.recyclingItem.aggregate({
+        where: {
+          session: {
+            ended_at: { gte: thisMonthStart, lt: nextMonthStart },
+          },
+        },
+        _sum: {
+          weight: true,
+          co2_saved: true,
+        },
+      }),
+
+      prisma.recyclingItem.aggregate({
+        where: {
+          session: {
+            ended_at: { gte: lastMonthStart, lt: thisMonthStart },
+          },
+        },
+        _sum: {
+          weight: true,
+          co2_saved: true,
+        },
+      }),
+
+      prisma.recyclingSession.findMany({
+        where: {
+          ended_at: { gte: thisMonthStart, lt: nextMonthStart },
+          user_id: { not: null },
+        },
+        select: {
+          user_id: true,
+        },
+        distinct: ["user_id"],
+      }),
+
+      prisma.recyclingSession.findMany({
+        where: {
+          ended_at: { gte: lastMonthStart, lt: thisMonthStart },
+          user_id: { not: null },
+        },
+        select: {
+          user_id: true,
+        },
+        distinct: ["user_id"],
+      }),
+
+      prisma.merchant.count({
+        where: {
+          created_at: { gte: thisMonthStart, lt: nextMonthStart },
+        },
+      }),
+
+      prisma.merchant.count({
+        where: {
+          created_at: { gte: lastMonthStart, lt: thisMonthStart },
+        },
+      }),
+    ]);
+
+    const totalWeight = toNum(totalsAgg._sum.weight);
+    const totalCo2 = toNum(totalsAgg._sum.co2_saved);
+
+    const thisMonthWeight = toNum(thisMonthItemsAgg._sum.weight);
+    const lastMonthWeight = toNum(lastMonthItemsAgg._sum.weight);
+
+    const thisMonthCo2 = toNum(thisMonthItemsAgg._sum.co2_saved);
+    const lastMonthCo2 = toNum(lastMonthItemsAgg._sum.co2_saved);
+
+    const activeUsersThisMonth = thisMonthUsersCount.length;
+    const activeUsersLastMonth = lastMonthUsersCount.length;
+
+    const merchantsThisMonth = thisMonthMerchantsCount;
+    const merchantsLastMonth = lastMonthMerchantsCount;
+
+    const recycledTrend = buildTrend(thisMonthWeight, lastMonthWeight);
+    const co2Trend = buildTrend(thisMonthCo2, lastMonthCo2);
+    const usersTrend = buildTrend(activeUsersThisMonth, activeUsersLastMonth);
+    const merchantsTrend = buildTrend(merchantsThisMonth, merchantsLastMonth);
+
+    const data = {
+      total_weight_recycled: {
+        label: `${round1(totalWeight)}kg`,
+        trend: recycledTrend.trend,
+        percent: recycledTrend.percent,
+        message: "vs last month",
+      },
+      total_co2_emission_saved: {
+        label: `${round1(totalCo2)}kg`,
+        trend: co2Trend.trend,
+        percent: co2Trend.percent,
+        message: "vs last month",
+      },
+      total_merchants: {
+        label: `${totalMerchants}`,
+        trend: merchantsTrend.trend,
+        percent: merchantsTrend.percent,
+        message: "new merchants vs last month",
+      },
+      total_users: {
+        label: `${totalUsers}`,
+        trend: usersTrend.trend,
+        percent: usersTrend.percent,
+        message: "active users vs last month",
+      },
+    };
+
+    return response.success(res, data, "Admin home data retrieved", 200);
+  } catch (err) {
+    console.error("getAdminHome error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+function buildTrend(currentValue, previousValue) {
+  let trend = "";
+  let percent = 0;
+
+  if (previousValue === 0 && currentValue > 0) {
+    trend = "↑";
+    percent = 100;
+  } else if (previousValue > 0) {
+    const change = ((currentValue - previousValue) / previousValue) * 100;
+    percent = round0(Math.abs(change));
+
+    if (change > 0) trend = "↑";
+    else if (change < 0) trend = "↓";
+  }
+
+  return {
+    trend,
+    percent,
+  };
+}
