@@ -14,16 +14,7 @@ function toDateOrNull(v) {
 
 exports.createReward = async (req, res) => {
   try {
-    const {
-      merchant_id,
-      name,
-      description,
-      points_needed,
-      max_redemptions,
-      max_per_user,
-      starts_at,
-      expires_at,
-    } = req.body;
+    const { merchant_id, name, description, points_needed, max_redemptions, max_per_user, starts_at, expires_at } = req.body;
 
     if (!merchant_id || !name || points_needed === undefined) {
       return response.error(res, "merchant_id, name and points_needed are required", 400);
@@ -165,17 +156,7 @@ exports.listRewards = async (req, res) => {
 exports.updateReward = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      merchant_id,
-      name,
-      description,
-      points_needed,
-      max_redemptions,
-      max_per_user,
-      starts_at,
-      expires_at,
-      status,
-    } = req.body;
+    const { merchant_id, name, description, points_needed, max_redemptions, max_per_user, starts_at, expires_at, status } = req.body;
 
     const existing = await rewardModel.findActiveById(id);
     if (!existing) {
@@ -364,6 +345,92 @@ exports.redeemReward = async (req, res) => {
     return response.success(res, null, "Reward redeemed", 200);
   } catch (err) {
     console.error("redeemReward error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.getUsePreview = async (req, res) => {
+  try {
+    const rewardId = Number(req.params.id);
+
+    if (!Number.isInteger(rewardId) || rewardId <= 0) {
+      return response.error(res, "Invalid reward id", 400);
+    }
+
+    const redemption = await rewardRedemptionModel.findUsableByRewardIdAndUserId({
+      reward_id: rewardId,
+      user_id: req.user.id,
+    });
+
+    if (!redemption) {
+      return response.error(res, "No usable reward redemption found", 404);
+    }
+
+    return response.success(
+      res,
+      {
+        redemption_id: redemption.id,
+        reward_id: redemption.reward_id,
+        reward_name: redemption.reward?.name ?? null,
+        merchant_name: redemption.reward?.merchant?.name ?? null,
+        promo_code: redemption.promo_code,
+        qr_value: redemption.promo_code,
+        valid_until: redemption.reward?.expires_at ?? null,
+        redeemed_at: redemption.redeemed_at,
+      },
+      "Reward use preview retrieved",
+      200,
+    );
+  } catch (err) {
+    console.error("getUsePreview error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.useRewardRedemption = async (req, res) => {
+  try {
+    const redemptionId = Number(req.params.id);
+
+    if (!Number.isInteger(redemptionId) || redemptionId <= 0) {
+      return response.error(res, "Invalid redemption id", 400);
+    }
+
+    const redemption = await rewardRedemptionModel.findByIdAndUserId({
+      id: redemptionId,
+      user_id: req.user.id,
+    });
+
+    if (!redemption) {
+      return response.error(res, "Reward redemption not found", 404);
+    }
+
+    if (redemption.used_at) {
+      return response.error(res, "Reward has already been used", 400);
+    }
+
+    if (redemption.reward?.status !== "active") {
+      return response.error(res, "Reward is inactive", 400);
+    }
+
+    if (redemption.reward?.expires_at && new Date(redemption.reward.expires_at) <= new Date()) {
+      return response.error(res, "Reward has expired", 400);
+    }
+
+    const updated = await rewardRedemptionModel.markAsUsedById(redemptionId);
+
+    return response.success(
+      res,
+      {
+        redemption_id: updated.id,
+        reward_id: updated.reward_id,
+        promo_code: updated.promo_code,
+        used_at: updated.used_at,
+      },
+      "Reward marked as used",
+      200,
+    );
+  } catch (err) {
+    console.error("useRewardRedemption error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

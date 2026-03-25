@@ -13,5 +13,7 @@ router.patch("/rewards/:id", authenticate, authorize("admin"), rewardController.
 router.delete("/rewards/:id", authenticate, authorize("admin"), rewardController.deleteReward);
 router.patch("/rewards/:id/status", authenticate, authorize("admin"), rewardController.setRewardStatus);
 router.post("/rewards/:id/redeem", authenticate, authorize("user"), rewardController.redeemReward);
+router.get("/reward-redemptions/:id/use-preview", authenticate, authorize("user"), rewardController.getUsePreview);
+router.patch("/reward-redemptions/:id/use", authenticate, authorize("user"), rewardController.useRewardRedemption);
 
 module.exports = router;

@@ -72,4 +72,69 @@ module.exports = {
       unused: totalUnused,
     };
   },
+
+  findUsableByRewardIdAndUserId: ({ reward_id, user_id }) => {
+    return prisma.rewardRedemption.findFirst({
+      where: {
+        reward_id: Number(reward_id),
+        user_id: Number(user_id),
+        used_at: null,
+        reward: {
+          deleted_at: null,
+          status: "active",
+          OR: [{ expires_at: null }, { expires_at: { gt: new Date() } }],
+        },
+      },
+      select: {
+        ...selectRedemption,
+        reward: {
+          select: {
+            id: true,
+            name: true,
+            expires_at: true,
+            merchant: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        redeemed_at: "asc",
+      },
+    });
+  },
+
+  findByIdAndUserId: ({ id, user_id }) => {
+    return prisma.rewardRedemption.findFirst({
+      where: {
+        id: Number(id),
+        user_id: Number(user_id),
+      },
+      select: {
+        ...selectRedemption,
+        reward: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            expires_at: true,
+            deleted_at: true,
+          },
+        },
+      },
+    });
+  },
+
+  markAsUsedById: (id) => {
+    return prisma.rewardRedemption.update({
+      where: { id: Number(id) },
+      data: {
+        used_at: new Date(),
+      },
+      select: selectRedemption,
+    });
+  },
 };
