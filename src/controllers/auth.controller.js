@@ -21,7 +21,10 @@ exports.signup = async (req, res) => {
     }
 
     // ✅ Check duplicates
-    const existing = await userModel.findByEmail(email.toLowerCase());
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await userModel.findExistingByEmail(normalizedEmail);
+
     if (existing) {
       return response.error(res, "Email already registered", 409);
     }
@@ -59,14 +62,10 @@ exports.login = async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     // ✅ Find user (include password hash for compare)
-    const user = await userModel.findForLoginByEmail(normalizedEmail);
+    const user = await userModel.findExistingForLoginByEmail(normalizedEmail);
     if (!user) {
       // Do NOT reveal whether email exists
       return response.error(res, "Invalid email or password", 400);
-    }
-
-    if (user.deleted_at) {
-      return response.error(res, "User not found", 404);
     }
 
     // ✅ Compare password
@@ -115,7 +114,7 @@ exports.resetPassword = async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
 
-    await userModel.updatePasswordByEmail(normalizedEmail, hashed);
+    await userModel.updatePasswordById(user.id, hashed);
 
     return response.success(res, null, "Password reset successful", 200);
   } catch (err) {
@@ -187,6 +186,10 @@ exports.changePassword = async (req, res) => {
 
     if (!password) {
       return response.error(res, "Password is required", 400);
+    }
+
+    if (typeof password !== "string" || password.length < 8) {
+      return response.error(res, "Password must be at least 8 characters", 400);
     }
 
     const hashed = await bcrypt.hash(password, 10);

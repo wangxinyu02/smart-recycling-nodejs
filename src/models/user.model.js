@@ -3,11 +3,11 @@
 const prisma = require("../config/prisma");
 
 module.exports = {
-  findByEmail: (email) => prisma.user.findUnique({ where: { email } }),
+  findExistingByEmail: (email) => prisma.user.findFirst({ where: { email , deleted_at:null} }),
 
-  findForLoginByEmail: (email) =>
-    prisma.user.findUnique({
-      where: { email },
+  findExistingForLoginByEmail: (email) =>
+    prisma.user.findFirst({
+      where: { email, deleted_at: null },
       select: {
         id: true,
         name: true,

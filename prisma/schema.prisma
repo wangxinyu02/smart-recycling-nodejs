@@ -49,7 +49,7 @@ enum otp_purpose {
 model User {
   id            Int        @id @default(autoincrement())
   name          String?    @db.VarChar(100)
-  email         String     @unique @db.VarChar(100)
+  email         String     @db.VarChar(100)
   password_hash String     @db.VarChar(255)
   role          user_role  @default(user)
 
