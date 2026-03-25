@@ -31,21 +31,46 @@ module.exports = {
       },
     }),
 
-  getAllUsers: () => {
-    return prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
+  getAllUsers: async ({ page = 1, limit = 20, role }) => {
+    const skip = (page - 1) * limit;
+
+    const where = {
+      deleted_at: null, // exclude soft-deleted users
+    };
+
+    if (role) {
+      where.role = role;
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          created_at: true,
+          updated_at: true,
+        },
+        orderBy: {
+          created_at: "desc",
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return {
+      items: users,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.ceil(total / limit),
       },
-      orderBy: {
-        created_at: "desc",
-      },
-    });
+    };
   },
 
   getUserById: (id) => {

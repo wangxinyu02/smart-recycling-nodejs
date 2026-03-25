@@ -39,4 +39,37 @@ module.exports = {
       select: selectRedemption,
     });
   },
+
+  getUserRedemptionSummary: async (user_id) => {
+    const userId = Number(user_id);
+
+    const grouped = await prisma.rewardRedemption.groupBy({
+      by: ["used_at"],
+      where: {
+        user_id: userId,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    let totalUsed = 0;
+    let totalUnused = 0;
+
+    grouped.forEach((row) => {
+      if (row.used_at === null) {
+        totalUnused = row._count.id;
+      } else {
+        totalUsed += row._count.id;
+      }
+    });
+
+    const totalRedeemed = totalUsed + totalUnused;
+
+    return {
+      redeemed: totalRedeemed,
+      used: totalUsed,
+      unused: totalUnused,
+    };
+  },
 };

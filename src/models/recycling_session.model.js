@@ -203,4 +203,42 @@ module.exports = {
       breakdown: breakdownMap.get(s.id) ?? [],
     }));
   },
+
+  // Average weight per completed session
+  getAverageWeightPerSessionByUserId: async (user_id) => {
+    const userId = Number(user_id);
+
+    // 1. Total weight (only ended sessions)
+    const weightAgg = await prisma.recyclingItem.aggregate({
+      where: {
+        session: {
+          user_id: userId,
+          ended_at: { not: null },
+        },
+      },
+      _sum: {
+        weight: true,
+      },
+    });
+
+    // 2. Count completed sessions
+    const totalSessions = await prisma.recyclingSession.count({
+      where: {
+        user_id: userId,
+        ended_at: { not: null },
+      },
+    });
+
+    const totalWeight = Number(weightAgg._sum.weight ?? 0);
+
+    if (totalSessions === 0) {
+      return {
+        average_weight_per_session: 0,
+      };
+    }
+
+    return {
+      average_weight_per_session: Number((totalWeight / totalSessions).toFixed(2)),
+    };
+  },
 };

@@ -1,17 +1,35 @@
 // src/controllers/user.controller.js
 
 const userModel = require("../models/user.model");
+const pointsTxnModel = require("../models/points_transaction.model");
+const sessionModel = require("../models/recycling_session.model");
+const itemModel = require("../models/recycling_item.model");
+const rewardRedemptionModel = require("../models/reward_redemption.model");
 const response = require("../utils/response.utils");
 const prisma = require("../config/prisma");
 const { buildParticipationMessage } = require("../utils/participation_rate.utils");
 const { buildCo2ImpactMessage } = require("../utils/co2.utils");
 const { toNum, round0, round1 } = require("../utils/number.utils");
 const { startOfMonthUTC, addMonthsUTC } = require("../utils/date.utils");
+const { capitalizeFirstLetter } = require("../utils/string.utils");
 
 exports.getUsers = async (req, res) => {
   try {
-    const users = await userModel.getAllUsers();
-    return response.success(res, users, "Users fetched successfully", 200);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 10, 1);
+    const role = req.query.role?.toLowerCase();
+
+    if (role && !["admin", "user"].includes(role)) {
+      return response.error(res, "Invalid role filter.", 400);
+    }
+
+    const result = await userModel.getAllUsers({
+      page,
+      limit,
+      role,
+    });
+
+    return response.success(res, result, "Users fetched successfully", 200);
   } catch (err) {
     console.error("getUsers error:", err);
     return response.error(res, { error: err.message }, "Internal Server Error", 500);
@@ -39,7 +57,44 @@ exports.getUserById = async (req, res) => {
       return response.error(res, "User not found", 404);
     }
 
-    return response.success(res, { user }, "User fetched successfully", 200);
+    const allTimeTotal = await itemModel.getAllTimeTotalsByUserId(userId);
+
+    const totalPoints = await pointsTxnModel.getTotalPointsByUserId(userId);
+    const breakdownPoints = await pointsTxnModel.getPointsSummaryByUserId(userId);
+    const totalSessions = await sessionModel.countSessions({ user_id: userId });
+    const averageWeightPerSession = await sessionModel.getAverageWeightPerSessionByUserId(userId);
+    const rewardsSummary = await rewardRedemptionModel.getUserRedemptionSummary(userId);
+
+    const topMaterial = await itemModel.getTopMaterial({
+      user_id: userId,
+    });
+
+    const data = {
+      user,
+      summary: {
+        total_weight_recycled: `${round1(allTimeTotal.totalWeight)}kg`,
+        total_co2_emission_saved: `${round1(allTimeTotal.totalCo2)}kg`,
+        total_sessions: null,
+        points: `${totalPoints} pts`,
+      },
+      recycling_activity: {
+        total_sessions: totalSessions,
+        average_weight_per_session: `${averageWeightPerSession.average_weight_per_session}kg`,
+        top_recycled_material: topMaterial ? capitalizeFirstLetter(topMaterial.material) : null,
+      },
+      points: {
+        balance: `${totalPoints} pts`,
+        earned: `${breakdownPoints.earned} pts`,
+        spent: `${breakdownPoints.spent} pts`,
+      },
+      rewards: {
+        redeemed: rewardsSummary.redeemed,
+        used: rewardsSummary.used,
+        unused: rewardsSummary.unused,
+      },
+    };
+
+    return response.success(res, data, "User fetched successfully", 200);
   } catch (err) {
     console.error("getUserById Error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);

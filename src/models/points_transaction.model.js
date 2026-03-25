@@ -50,4 +50,41 @@ module.exports = {
       },
     });
   },
+
+  getPointsSummaryByUserId: async (user_id) => {
+    const result = await prisma.pointsTransaction.groupBy({
+      by: ["type"],
+      where: {
+        user_id: Number(user_id),
+      },
+      _sum: {
+        points: true,
+      },
+    });
+
+    let earned = 0;
+    let spent = 0;
+
+    result.forEach((row) => {
+      if (row.type === "earn" || row.type === "refund") {
+        earned += Number(row._sum.points || 0);
+      }
+
+      if (row.type === "redeem") {
+        spent += Math.abs(Number(row._sum.points || 0));
+      }
+
+      // optional: if adjust exists
+      if (row.type === "adjust") {
+        const val = Number(row._sum.points || 0);
+        if (val >= 0) earned += val;
+        else spent += Math.abs(val);
+      }
+    });
+
+    return {
+      earned,
+      spent,
+    };
+  },
 };

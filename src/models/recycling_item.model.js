@@ -1,6 +1,7 @@
 // src/models/recycling_item.model.js
 
 const prisma = require("../config/prisma");
+const { toNum } = require("../utils/number.utils");
 
 const selectItem = {
   id: true,
@@ -66,5 +67,66 @@ module.exports = {
 
       return item;
     });
+  },
+
+  getAllTimeTotalsByUserId: async (userId) => {
+    const totalsAgg = await prisma.recyclingItem.aggregate({
+      where: {
+        session: {
+          user_id: Number(userId),
+          ended_at: { not: null },
+        },
+      },
+      _sum: {
+        weight: true,
+        co2_saved: true,
+      },
+    });
+
+    return {
+      totalWeight: toNum(totalsAgg._sum.weight),
+      totalCo2: toNum(totalsAgg._sum.co2_saved),
+    };
+  },
+
+  // Get top recycled material (by weight)
+  getTopMaterial: async ({ user_id, role, year }) => {
+    const sessionWhere = {};
+
+    // only filter by year IF provided
+    if (year) {
+      sessionWhere.claimed_at = {
+        gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),
+      };
+    }
+
+    // restrict to own data if not admin
+    if (role !== "admin") {
+      sessionWhere.user_id = Number(user_id);
+    }
+
+    const result = await prisma.recyclingItem.groupBy({
+      by: ["material"],
+      where: {
+        session: sessionWhere,
+      },
+      _sum: {
+        weight: true,
+      },
+      orderBy: {
+        _sum: {
+          weight: "desc",
+        },
+      },
+      take: 1,
+    });
+
+    if (!result.length) return null;
+
+    return {
+      material: result[0].material,
+      weight_kg: Number(result[0]._sum.weight ?? 0),
+    };
   },
 };
