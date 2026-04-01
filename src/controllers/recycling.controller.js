@@ -5,7 +5,7 @@ const prisma = require("../config/prisma");
 const sessionModel = require("../models/recycling_session.model");
 const response = require("../utils/response.utils");
 const { calcCo2Saved, buildCo2ImpactMessage } = require("../utils/co2.utils");
-const { toNumberOrNull } = require("../utils/number.utils");
+const { toNumberOrNull, round2 } = require("../utils/number.utils");
 const { capitalizeFirstLetter } = require("../utils/string.utils");
 const { MATERIALS } = require("../config/material.config");
 
@@ -123,18 +123,21 @@ exports.endSession = async (req, res) => {
     const rows = breakdown
       .map((r, idx) => {
         const bin_id = Number(r?.bin_id);
-        const weight = toNumberOrNull(r?.weight);
+        const rawWeight = toNumberOrNull(r?.weight);
 
         if (!Number.isInteger(bin_id) || bin_id <= 0) {
           const err = new Error(`Invalid bin_id at index ${idx}`);
           err.statusCode = 400;
           throw err;
         }
-        if (weight === null || weight < 0) {
+
+        if (rawWeight === null || rawWeight < 0) {
           const err = new Error(`Invalid weight at index ${idx}`);
           err.statusCode = 400;
           throw err;
         }
+
+        const weight = round2(rawWeight);
 
         return { bin_id, weight };
       })
@@ -147,11 +150,13 @@ exports.endSession = async (req, res) => {
     // ✅ Merge duplicate bin_id
     const mergedMap = new Map();
     for (const r of rows) {
-      mergedMap.set(r.bin_id, (mergedMap.get(r.bin_id) ?? 0) + r.weight);
+      const current = mergedMap.get(r.bin_id) ?? 0;
+      mergedMap.set(r.bin_id, round2(current + r.weight));
     }
+
     const merged = Array.from(mergedMap.entries()).map(([bin_id, weight]) => ({
       bin_id,
-      weight: Number(weight.toFixed(2)),
+      weight: round2(weight),
     }));
 
     const result = await prisma.$transaction(async (tx) => {
@@ -173,7 +178,6 @@ exports.endSession = async (req, res) => {
         throw err;
       }
 
-      // ✅ Load bins
       const binIds = merged.map((x) => x.bin_id);
       const bins = await tx.bin.findMany({
         where: { id: { in: binIds } },
@@ -193,30 +197,28 @@ exports.endSession = async (req, res) => {
       let totalWeight = 0;
       let totalCo2 = 0;
 
-      // ✅ Create items
       for (const row of merged) {
         const material = binMap.get(row.bin_id).material;
-        const co2 = calcCo2Saved(material, row.weight);
+        const co2 = round2(calcCo2Saved(material, row.weight));
 
-        totalWeight += row.weight;
-        totalCo2 += co2;
+        totalWeight = round2(totalWeight + row.weight);
+        totalCo2 = round2(totalCo2 + co2);
 
         await tx.recyclingItem.create({
           data: {
             session_id: sessionId,
             bin_id: row.bin_id,
             material,
-            weight: row.weight.toFixed(2),
-            co2_saved: co2.toFixed(2),
+            weight: row.weight,
+            co2_saved: co2,
           },
         });
       }
 
-      // ✅ End session + save total_co2
       await tx.recyclingSession.update({
         where: { id: sessionId },
         data: {
-          total_co2: totalCo2.toFixed(2),
+          total_co2: totalCo2,
           ended_at: new Date(),
         },
       });
@@ -225,6 +227,8 @@ exports.endSession = async (req, res) => {
 
       return {
         id: sessionId,
+        total_weight: totalWeight,
+        total_co2: totalCo2,
         qr_payload,
       };
     });

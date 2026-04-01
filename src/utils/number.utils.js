@@ -18,9 +18,14 @@ function round1(n) {
   return Number(n.toFixed(1));
 }
 
+function round2(n) {
+  return Number(n.toFixed(2));
+}
+
 module.exports = {
   toNum,
   toNumberOrNull,
   round0,
   round1,
+  round2,
 };
