@@ -2,8 +2,23 @@
 
 const prisma = require("../config/prisma");
 
+const selectUser = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  status: true,
+  must_reset_password: true,
+  password_reset_at: true,
+  invited_at: true,
+  invited_by: true,
+  created_at: true,
+  updated_at: true,
+  deleted_at: true,
+};
+
 module.exports = {
-  findExistingByEmail: (email) => prisma.user.findFirst({ where: { email , deleted_at:null} }),
+  findExistingByEmail: (email) => prisma.user.findFirst({ where: { email, deleted_at: null } }),
 
   findExistingForLoginByEmail: (email) =>
     prisma.user.findFirst({
@@ -23,12 +38,7 @@ module.exports = {
   createUser: (data) =>
     prisma.user.create({
       data,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        password_hash: true,
-      },
+      select: selectUser,
     }),
 
   getAllUsers: async ({ page = 1, limit = 20, role }) => {
@@ -76,45 +86,21 @@ module.exports = {
   getUserById: (id) => {
     return prisma.user.findUnique({
       where: { id: Number(id) },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-      },
+      select: selectUser,
     });
   },
 
   getExistingUserById: (id) => {
     return prisma.user.findFirst({
       where: { id: Number(id), deleted_at: null },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-      },
+      select: selectUser,
     });
   },
 
   getExistingUserByEmail: (email) => {
     return prisma.user.findFirst({
       where: { email: email, deleted_at: null },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-      },
+      select: selectUser,
     });
   },
 
@@ -122,15 +108,7 @@ module.exports = {
     return prisma.user.update({
       where: { id: Number(id) },
       data,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-      },
+      select: selectUser,
     });
   },
 
@@ -138,33 +116,13 @@ module.exports = {
     return prisma.user.update({
       where: { id: Number(id) },
       data: { deleted_at: new Date() },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-      },
-    });
-  },
-
-  updatePasswordByEmail: (email, password_hash) => {
-    return prisma.user.update({
-      where: { email, deleted_at: null },
-      data: { password_hash },
-      select: {
-        id: true,
-        email: true,
-        updated_at: true,
-      },
+      select: selectUser,
     });
   },
 
   updatePasswordById: (id, password_hash) => {
     return prisma.user.update({
-      where: { id, deleted_at: null },
+      where: { id },
       data: { password_hash },
       select: {
         id: true,
@@ -188,6 +146,17 @@ module.exports = {
         id: true,
         password_hash: true,
       },
+    });
+  },
+
+  markPasswordAsReset: async (id) => {
+    return prisma.user.update({
+      where: { id: Number(id) },
+      data: {
+        must_reset_password: false,
+        password_reset_at: new Date(),
+      },
+      select: selectUser,
     });
   },
 };

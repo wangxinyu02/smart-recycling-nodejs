@@ -116,6 +116,10 @@ exports.resetPassword = async (req, res) => {
 
     await userModel.updatePasswordById(user.id, hashed);
 
+    if (user.must_reset_password) {
+      await userModel.markPasswordAsReset(user.id);
+    }
+
     return response.success(res, null, "Password reset successful", 200);
   } catch (err) {
     console.error("resetPassword error:", err);
@@ -195,6 +199,12 @@ exports.changePassword = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     await userModel.updatePasswordById(userId, hashed);
+
+    const user = await userModel.getUserById(userId);
+
+    if (user.must_reset_password) {
+      await userModel.markPasswordAsReset(user.id);
+    }
 
     return response.success(res, null, "Password changed successful", 200);
   } catch (err) {
