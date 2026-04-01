@@ -7,11 +7,14 @@ const itemModel = require("../models/recycling_item.model");
 const rewardRedemptionModel = require("../models/reward_redemption.model");
 const response = require("../utils/response.utils");
 const prisma = require("../config/prisma");
+const bcrypt = require("bcrypt");
 const { buildParticipationMessage } = require("../utils/participation_rate.utils");
 const { buildCo2ImpactMessage } = require("../utils/co2.utils");
 const { toNum, round0, round1 } = require("../utils/number.utils");
 const { startOfMonthUTC, addMonthsUTC } = require("../utils/date.utils");
 const { capitalizeFirstLetter } = require("../utils/string.utils");
+const { generateTemporaryPassword } = require("../utils/password.utils");
+const { sendAdminInvitation } = require("../utils/mailer.utils");
 
 exports.getUsers = async (req, res) => {
   try {
@@ -464,3 +467,59 @@ function buildTrend(currentValue, previousValue) {
     percent,
   };
 }
+
+exports.inviteAdmin = async (req, res) => {
+  try {
+    const inviterId = req.user.id;
+    const { name, email } = req.body;
+
+    // ✅ Basic validation
+    if (!name || !email) {
+      return response.error(res, "Name and email are required", 400);
+    }
+
+    if (typeof !name == "string" || typeof email !== "string") {
+      return response.error(res, "Invalid input types", 400);
+    }
+
+    // ✅ Check duplicates
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await userModel.findExistingByEmail(normalizedEmail);
+
+    if (existing) {
+      return response.error(res, "Email already registered", 409);
+    }
+
+    const temporaryPassword = generateTemporaryPassword(8);
+    const hashed = await bcrypt.hash(temporaryPassword, 10);
+
+    // ✅ Create user
+    const user = await userModel.createUser({
+      name: name?.trim() || null,
+      email: normalizedEmail,
+      password_hash: hashed,
+      role: "admin",
+      must_reset_password: true,
+      invited_at: new Date(),
+      invited_by: inviterId,
+    });
+
+    const inviter = await userModel.getUserById(inviterId);
+
+    sendAdminInvitation({ to: user.email, inviterName: inviter.name, name: user.name, email: user.email, password: temporaryPassword }).catch((err) =>
+      console.error("sendAdminInvitation error:", err),
+    );
+
+    return response.success(res, { id: user.id }, "Admin invited successfully.", 200);
+  } catch (err) {
+    console.error("inviteAdmin error:", err);
+
+    // Prisma unique constraint (duplicate email) commonly throws error code P2002
+    if (err.code === "P2002") {
+      return response.error(res, "Email already registered", 409);
+    }
+
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};

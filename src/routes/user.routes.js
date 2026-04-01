@@ -10,7 +10,8 @@ router.get("/users/", authenticate, authorize("admin"), userController.getUsers)
 router.get("/users/:id", authenticate, userController.getUserById);
 router.patch("/users/:id", authenticate, userController.updateUser);
 router.delete("/users/:id", authenticate, userController.deleteUser);
-router.get("/users/:id/home", authenticate,  authorize("user"),userController.getHome); // user home
+router.get("/users/:id/home", authenticate, authorize("user"), userController.getHome); // user home
 router.get("/home/admin", authenticate, authorize("admin"), userController.getAdminHome); // admin home
+router.post("/admin/invite", authenticate, authorize("admin"), userController.inviteAdmin);
 
 module.exports = router;

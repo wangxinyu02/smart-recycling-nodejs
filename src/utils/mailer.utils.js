@@ -1,3 +1,5 @@
+// src/utils/mailer.utils.js
+
 const nodemailer = require("nodemailer");
 const fs = require("fs");
 const path = require("path");
@@ -21,15 +23,9 @@ function compileTemplate(templateName, data) {
 }
 
 async function sendOtpEmail({ to, otp, purpose }) {
-  const title =
-    purpose === "signup"
-      ? "Verify Your Email"
-      : "Reset Your Password";
+  const title = purpose === "signup" ? "Verify Your Email" : "Reset Your Password";
 
-  const subtitle =
-    purpose === "signup"
-      ? "Thank you for joining Smart Recycling 🌱"
-      : "We received a request to reset your password.";
+  const subtitle = purpose === "signup" ? "Thank you for joining Smart Recycling 🌱" : "We received a request to reset your password.";
 
   const html = compileTemplate("otp.template", {
     otp,
@@ -48,4 +44,21 @@ async function sendOtpEmail({ to, otp, purpose }) {
   });
 }
 
-module.exports = { sendOtpEmail };
+async function sendAdminInvitation({ to, inviterName, name, email, password }) {
+  const html = compileTemplate("invitation.template", {
+    inviterName,
+    name,
+    email,
+    password,
+  });
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject: "You're Invited as an Admin - Smart Recycling",
+    text: "",
+    html,
+  });
+}
+
+module.exports = { sendOtpEmail, sendAdminInvitation };

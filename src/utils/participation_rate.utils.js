@@ -2,7 +2,7 @@
 
 function buildParticipationMessage(trend, percent) {
   // percent is already absolute number (e.g., 50 means +50%)
-  if (trend === "up") {
+  if (trend === "↑") {
     if (percent >= 50) {
       return {
         headline: "Great consistency! 🌟",
@@ -21,7 +21,7 @@ function buildParticipationMessage(trend, percent) {
     };
   }
 
-  if (trend === "down") {
+  if (trend === "↓") {
     return {
       headline: "Let’s get back on track! 💪",
       description: "A small recycling session this week can boost your impact! ♻️",

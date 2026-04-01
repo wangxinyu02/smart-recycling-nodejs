@@ -20,6 +20,11 @@ enum user_role {
   admin
 }
 
+enum user_status {
+  active
+  inactive
+}
+
 enum material_type {
   plastic
   paper
@@ -52,6 +57,12 @@ model User {
   email         String     @db.VarChar(100)
   password_hash String     @db.VarChar(255)
   role          user_role  @default(user)
+  status        user_status @default(active)
+  must_reset_password    Boolean    @default(false)
+  password_reset_at      DateTime?
+
+  invited_at             DateTime?
+  invited_by             Int?
 
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
@@ -62,6 +73,7 @@ model User {
   points_transactions PointsTransaction[]
 
   @@index([deleted_at])
+  @@index([email, deleted_at])
   @@map("users")
 }
 
