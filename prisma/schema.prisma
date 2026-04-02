@@ -51,26 +51,34 @@ enum otp_purpose {
   reset
 }
 
+enum notification_type {
+  bin_alert
+  session_claimed
+  reward_redeemed
+  system
+}
 model User {
-  id            Int        @id @default(autoincrement())
-  name          String?    @db.VarChar(100)
-  email         String     @db.VarChar(100)
-  password_hash String     @db.VarChar(255)
-  role          user_role  @default(user)
-  status        user_status @default(active)
-  must_reset_password    Boolean    @default(false)
-  password_reset_at      DateTime?
+  id                    Int                 @id @default(autoincrement())
+  name                  String?             @db.VarChar(100)
+  email                 String              @db.VarChar(100)
+  password_hash         String              @db.VarChar(255)
+  role                  user_role           @default(user)
+  status                user_status         @default(active)
+  must_reset_password   Boolean             @default(false)
+  password_reset_at     DateTime?
 
-  invited_at             DateTime?
-  invited_by             Int?
+  invited_at            DateTime?
+  invited_by            Int?
 
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
-  deleted_at    DateTime?
+  created_at            DateTime            @default(now())
+  updated_at            DateTime            @updatedAt
+  deleted_at            DateTime?
 
-  sessions RecyclingSession[]
-  reward_redemptions  RewardRedemption[]
-  points_transactions PointsTransaction[]
+  sessions              RecyclingSession[]
+  reward_redemptions    RewardRedemption[]
+  points_transactions   PointsTransaction[]
+  devices               UserDevice[]
+  notifications         Notification[]
 
   @@index([deleted_at])
   @@index([email, deleted_at])
@@ -222,4 +230,34 @@ model OtpCode {
   @@index([expires_at])
   @@map("otp_codes")
 
+}
+
+model UserDevice {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  fcm_token  String   @db.Text
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("user_devices")
+}
+
+model Notification {
+  id           Int               @id @default(autoincrement())
+  user_id       Int
+  title         String           @db.VarChar(150)
+  message       String           @db.VarChar(255)
+  type          notification_type
+  reference_id  Int?
+  read_at       DateTime?
+  created_at    DateTime         @default(now())
+
+  user          User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([user_id, read_at])
+  @@index([created_at])
+  @@map("notifications")
 }
