@@ -8,6 +8,8 @@ const { calcCo2Saved, buildCo2ImpactMessage } = require("../utils/co2.utils");
 const { toNumberOrNull, round2 } = require("../utils/number.utils");
 const { capitalizeFirstLetter } = require("../utils/string.utils");
 const { MATERIALS } = require("../config/material.config");
+const notificationService = require("../services/notification.service");
+const { buildNotification } = require("../config/notification.config");
 
 exports.createSession = async (req, res) => {
   try {
@@ -399,6 +401,22 @@ exports.claimSession = async (req, res) => {
 
     // overwrite points_earned from transaction result (source of truth)
     summary.points_earned = result.pointsEarned;
+
+    const built = buildNotification("session_claimed", {
+      points: result.pointsEarned,
+    });
+
+    await notificationService.notifyUser({
+      userId,
+      title: built.title,
+      message: built.message,
+      type: built.type,
+      referenceId: sessionId,
+      data: {
+        screen: "notifications",
+        session_id: sessionId,
+      },
+    });
 
     const impact_message = {
       headline: `You helped reduce ${summary.session.total_co2}kg of CO₂ ✅`,

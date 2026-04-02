@@ -11,6 +11,7 @@ const pointRoutes = require("./routes/point.routes");
 const binRoutes = require("./routes/bin.routes");
 const recyclingRoutes = require("./routes/recycling.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const userDeviceRoutes = require("./routes/user_device.routes");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/v1", pointRoutes);
 app.use("/api/v1", binRoutes);
 app.use("/api/v1", recyclingRoutes);
 app.use("/api/v1", notificationRoutes);
+app.use("/api/v1", userDeviceRoutes);
 
 console.log("✅ LOADED src/app.js");
 
