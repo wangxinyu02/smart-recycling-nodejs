@@ -60,6 +60,25 @@ exports.getUserById = async (req, res) => {
       return response.error(res, "User not found", 404);
     }
 
+    // ADMIN DETAIL RESPONSE
+    if (user.role === "admin") {
+      const data = {
+        user,
+        admin_meta: {
+          invited_by: user.invited_by_user
+            ? {
+                id: user.invited_by_user.id,
+                name: user.invited_by_user.name,
+                email: user.invited_by_user.email,
+              }
+            : null,
+        },
+      };
+
+      return response.success(res, data, "Admin fetched successfully", 200);
+    }
+
+    // NORMAL USER DETAIL RESPONSE
     const allTimeTotal = await itemModel.getAllTimeTotalsByUserId(userId);
 
     const totalPoints = await pointsTxnModel.getTotalPointsByUserId(userId);
@@ -77,7 +96,7 @@ exports.getUserById = async (req, res) => {
       summary: {
         total_weight_recycled: `${round1(allTimeTotal.totalWeight)}kg`,
         total_co2_emission_saved: `${round1(allTimeTotal.totalCo2)}kg`,
-        total_sessions: null,
+        total_sessions: totalSessions,
         points: `${totalPoints} pts`,
       },
       recycling_activity: {

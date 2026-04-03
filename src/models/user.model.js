@@ -86,7 +86,16 @@ module.exports = {
   getUserById: (id) => {
     return prisma.user.findUnique({
       where: { id: Number(id) },
-      select: selectUser,
+      select: {
+        ...selectUser,
+        invited_by_user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
     });
   },
 
