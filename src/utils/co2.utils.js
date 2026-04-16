@@ -28,100 +28,35 @@ exports.buildCo2ImpactMessage = (co2Kg, userId) => {
   const plural = (n, one, many = one + "s") => (n === 1 ? one : many);
 
   const FACTORS = [
-    // ---- Small impacts (daily activities) ----
     {
       type: "smartphone_charges",
-      kgPerUnit: 0.015,
+      kgPerUnit: 1 / 80.8, // 1 kg CO2e ≈ 80.8 smartphones charged
       category: "small",
-      render: (n) => `to charge your smartphone ${n} time${plural(n, "", "s")}.`,
+      render: (n) => `to charging ${n} smartphone${plural(n, "", "s")}.`,
     },
     {
-      type: "ceiling_fan_hours",
-      kgPerUnit: 0.036,
+      type: "miles_driven_gasoline_car",
+      kgPerUnit: 1 / 2.5, // 1 kg CO2e ≈ 2.5 miles driven
       category: "small",
-      render: (n) => `to run a ceiling fan for ${n} ${plural(n, "hour")}.`,
+      render: (n) => `to driving an average gasoline-powered passenger vehicle for ${n} ${plural(n, "mile")}.`,
     },
     {
-      type: "green_leaves",
-      kgPerUnit: 0.05,
-      category: "small",
-      render: (n) => `to the carbon absorbed by ${n} green leaf${plural(n, "", "s")} during photosynthesis.`,
-    },
-    {
-      type: "streaming_hours_hd",
-      kgPerUnit: 0.055,
-      category: "small",
-      render: (n) => `to stream ${n} ${plural(n, "hour")} of high-definition video.`,
-    },
-
-    // ---- Medium impacts (lifestyle / energy) ----
-    {
-      type: "coffee_pots",
-      kgPerUnit: 0.12,
+      type: "gallons_of_gasoline",
+      kgPerUnit: 1 / 0.113, // 1 kg CO2e ≈ 0.113 gallons gasoline consumed
       category: "medium",
-      render: (n) => `to brew ${n} ${plural(n, "pot")} of coffee.`,
+      render: (n) => `to consuming ${n} ${plural(n, "gallon")} of gasoline.`,
     },
     {
-      type: "ev_miles",
-      kgPerUnit: 0.12,
+      type: "trash_bags_recycled",
+      kgPerUnit: 1 / 0.085, // 1 kg CO2e ≈ 0.085 trash bags recycled instead of landfilled
       category: "medium",
-      render: (n) => `to drive an electric car for ${n} ${plural(n, "mile")}.`,
+      render: (n) => `to recycling ${n} trash ${plural(n, "bag")} of waste instead of landfilling it.`,
     },
     {
-      type: "renewable_energy",
-      kgPerUnit: 0.475,
-      category: "medium",
-      render: (n) => `to generating ${n} kWh of clean renewable energy.`,
-    },
-    {
-      type: "bee_habitat_days",
-      kgPerUnit: 0.5,
-      category: "medium",
-      render: (n) => `to suppport pollinator habitats for about ${n} ${plural(n, "day")}.`,
-    },
-    {
-      type: "tablet_months",
-      kgPerUnit: 0.9,
-      category: "medium",
-      render: (n) => `to keep a tablet running for ${n} ${plural(n, "month")}.`,
-    },
-    {
-      type: "garden_plants",
-      kgPerUnit: 2,
-      category: "medium",
-      render: (n) => `to ${n} garden plant${plural(n, "", "s")} absorbing carbon for a year.`,
-    },
-
-    // ---- Large impacts (environmental) ----
-    {
-      type: "forest_area",
-      kgPerUnit: 1.5,
+      type: "tree_seedlings_10_years",
+      kgPerUnit: 1 / 0.017, // 1 kg CO2e ≈ 0.017 tree seedlings grown for 10 years
       category: "large",
-      render: (n) => `to preserving about ${n}m² of forest.`,
-    },
-    {
-      type: "seedlings_planted",
-      kgPerUnit: 8,
-      category: "large",
-      render: (n) => `to planting ${n} young tree seedling${plural(n, "", "s")}.`,
-    },
-    {
-      type: "tree_seedling_years",
-      kgPerUnit: 10,
-      category: "large",
-      render: (n) => `to a tree seedling growing for ${n} ${plural(n, "year")}.`,
-    },
-    {
-      type: "urban_tree_cooling",
-      kgPerUnit: 15,
-      category: "large",
-      render: (n) => `to ${n} urban tree${plural(n, "", "s")} helping cool city buildings.`,
-    },
-    {
-      type: "trees_planted",
-      kgPerUnit: 22,
-      category: "large",
-      render: (n) => `to planting ${n} tree${plural(n, "", "s")} and letting them grow for a year.`,
+      render: (n) => `to ${n} tree seedling${plural(n, "", "s")} grown for 10 years.`,
     },
   ];
 
@@ -147,7 +82,7 @@ exports.buildCo2ImpactMessage = (co2Kg, userId) => {
   eligible = eligible.filter((f) => co2 >= f.kgPerUnit);
 
   if (eligible.length === 0) {
-    eligible = FACTORS.filter((f) => f.category === category);
+    eligible = FACTORS;
   }
 
   // ---- Pick message ----
