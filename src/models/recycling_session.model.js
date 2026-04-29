@@ -5,7 +5,10 @@ const prisma = require("../config/prisma");
 const selectSession = {
   id: true,
   user_id: true,
+  bin_id: true,
   total_co2: true,
+  start_weight: true,
+  final_weight: true,
   started_at: true,
   ended_at: true,
   claimed_at: true,
@@ -79,6 +82,9 @@ module.exports = {
     return prisma.recyclingSession.update({
       where: { id: Number(id) },
       data: {
+        ...(data.bin_id !== undefined ? { bin_id: data.bin_id } : {}),
+        ...(data.start_weight !== undefined ? { start_weight: data.start_weight } : {}),
+        ...(data.final_weight !== undefined ? { final_weight: data.final_weight } : {}),
         ...(data.started_at !== undefined ? { started_at: data.started_at } : {}),
         ...(data.ended_at !== undefined ? { ended_at: data.ended_at } : {}),
       },
@@ -197,6 +203,7 @@ module.exports = {
     return sessions.map((s) => ({
       id: s.id,
       user_id: s.user_id,
+      bin_id: s.bin_id,
       claimed_at: s.claimed_at,
       total_co2: Number(s.total_co2 ?? 0),
       points_earned: pointsMap.get(s.id) ?? 0,

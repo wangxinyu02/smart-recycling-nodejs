@@ -10,6 +10,7 @@ const { capitalizeFirstLetter } = require("../utils/string.utils");
 const { MATERIALS } = require("../config/material.config");
 const notificationService = require("../services/notification.service");
 const { buildNotification } = require("../config/notification.config");
+const { publishBinCommand } = require("../services/mqtt.service");
 
 exports.createSession = async (req, res) => {
   try {
@@ -18,6 +19,173 @@ exports.createSession = async (req, res) => {
     return response.success(res, { id: session.id }, "Session created successfully", 201);
   } catch (err) {
     console.error("createSession error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+
+exports.startSession = async (req, res) => {
+  try {
+    const binId = Number(req.body?.bin_id);
+
+    if (!Number.isInteger(binId) || binId <= 0) {
+      return response.error(res, "Invalid bin_id", 400);
+    }
+
+    // const activeSession = await prisma.recyclingSession.findFirst({
+    //   where: {
+    //     bin_id: binId,
+    //     ended_at: null,
+    //   },
+    //   select: { id: true },
+    // });
+
+    // if (activeSession) {
+    //   return response.error(res, "This bin already has an active session", 409);
+    // }
+
+    const bin = await prisma.bin.findUnique({
+      where: { id: binId },
+      select: {
+        id: true,
+        current_weight: true,
+        status: true,
+        last_seen_at: true,
+      },
+    });
+
+    if (!bin) {
+      return response.error(res, "Bin not found", 404);
+    }
+
+    const session = await prisma.recyclingSession.create({
+      data: {
+        bin_id: binId,
+        start_weight: bin.current_weight,
+        started_at: new Date(),
+      },
+      select: {
+        id: true,
+        bin_id: true,
+        start_weight: true,
+        started_at: true,
+      },
+    });
+
+    const mqttCommandSent = publishBinCommand(binId, "start_session", {
+      session_id: session.id,
+    });
+
+    return response.success(
+      res,
+      {
+        session_id: session.id,
+        bin_id: session.bin_id,
+        start_weight: Number(session.start_weight ?? 0),
+        current_weight: Number(bin.current_weight ?? 0),
+        deposited_weight: 0,
+        mqtt_command_sent: mqttCommandSent,
+        last_seen_at: bin.last_seen_at,
+      },
+      "Session started successfully",
+      201,
+    );
+  } catch (err) {
+    console.error("startSession error:", err);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
+exports.getBinStatus = async (req, res) => {
+  try {
+    const binId = Number(req.params.bin_id);
+    if (!Number.isInteger(binId) || binId <= 0) {
+      return response.error(res, "Invalid bin id", 400);
+    }
+
+    const bin = await prisma.bin.findUnique({
+      where: { id: binId },
+      select: {
+        id: true,
+        current_weight: true,
+        status: true,
+        last_seen_at: true,
+      },
+    });
+
+    if (!bin) {
+      return response.error(res, "Bin not found", 404);
+    }
+
+    return response.success(
+      res,
+      {
+        bin_id: bin.id,
+        current_weight: Number(bin.current_weight ?? 0),
+        status: bin.status,
+        last_seen_at: bin.last_seen_at,
+      },
+      "Bin status fetched successfully",
+      200,
+    );
+  } catch (err) {
+    console.error("getBinStatus error:", err);
+    return response.error(res, "Internal Server Error", 500, err.message);
+  }
+};
+exports.getSessionLiveWeight = async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      return response.error(res, "Invalid session id", 400);
+    }
+
+    const session = await prisma.recyclingSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        bin_id: true,
+        start_weight: true,
+        ended_at: true,
+        bin: {
+          select: {
+            id: true,
+            current_weight: true,
+            status: true,
+            last_seen_at: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      return response.error(res, "Session not found", 404);
+    }
+
+    if (!session.bin_id || !session.bin) {
+      return response.error(res, "Session is not linked to a bin", 400);
+    }
+
+    const startWeight = Number(session.start_weight ?? 0);
+    const currentWeight = Number(session.bin.current_weight ?? 0);
+    const depositedWeight = Math.max(0, round2(currentWeight - startWeight));
+
+    return response.success(
+      res,
+      {
+        session_id: session.id,
+        bin_id: session.bin_id,
+        start_weight: startWeight,
+        current_weight: currentWeight,
+        deposited_weight: depositedWeight,
+        status: session.bin.status,
+        last_seen_at: session.bin.last_seen_at,
+        is_active: !session.ended_at,
+      },
+      "Live session weight fetched successfully",
+      200,
+    );
+  } catch (err) {
+    console.error("getSessionLiveWeight error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
@@ -110,7 +278,7 @@ exports.listSessions = async (req, res) => {
   }
 };
 
-exports.endSession = async (req, res) => {
+const endSessionFromBreakdown = async (req, res) => {
   try {
     const sessionId = Number(req.params.id);
     if (!Number.isInteger(sessionId) || sessionId <= 0) {
@@ -233,6 +401,122 @@ exports.endSession = async (req, res) => {
         total_co2: totalCo2,
         qr_payload,
       };
+    });
+
+    return response.success(res, result, "Session ended successfully", 200);
+  } catch (err) {
+    console.error("endSession error:", err);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
+exports.endSession = async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      return response.error(res, "Invalid session id", 400);
+    }
+
+    let commandBinId = null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const session = await tx.recyclingSession.findUnique({
+        where: { id: sessionId },
+        select: {
+          id: true,
+          bin_id: true,
+          start_weight: true,
+          ended_at: true,
+        },
+      });
+
+      if (!session) {
+        const err = new Error("Session not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      if (session.ended_at) {
+        const err = new Error("Session already ended");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (!session.bin_id) {
+        const err = new Error("Session is not linked to a bin");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (session.start_weight === null || session.start_weight === undefined) {
+        const err = new Error("Session start_weight is missing");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const bin = await tx.bin.findUnique({
+        where: { id: session.bin_id },
+        select: {
+          id: true,
+          material: true,
+          current_weight: true,
+        },
+      });
+
+      if (!bin) {
+        const err = new Error(`Bin not found: ${session.bin_id}`);
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const startWeight = Number(session.start_weight);
+      const finalWeight = Number(bin.current_weight ?? 0);
+      const depositedWeight = Math.max(0, round2(finalWeight - startWeight));
+
+      if (depositedWeight <= 0) {
+        const err = new Error("No deposited weight detected");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const totalCo2 = round2(calcCo2Saved(bin.material, depositedWeight));
+
+      await tx.recyclingItem.create({
+        data: {
+          session_id: sessionId,
+          bin_id: bin.id,
+          material: bin.material,
+          weight: depositedWeight,
+          co2_saved: totalCo2,
+        },
+      });
+
+      await tx.recyclingSession.update({
+        where: { id: sessionId },
+        data: {
+          total_co2: totalCo2,
+          final_weight: finalWeight.toFixed(2),
+          ended_at: new Date(),
+        },
+      });
+
+      commandBinId = bin.id;
+      const qr_payload = generateQrPayload(sessionId);
+
+      return {
+        id: sessionId,
+        bin_id: bin.id,
+        start_weight: startWeight,
+        final_weight: finalWeight,
+        deposited_weight: depositedWeight,
+        total_weight: depositedWeight,
+        total_co2: totalCo2,
+        qr_payload,
+      };
+    });
+
+    result.mqtt_command_sent = publishBinCommand(commandBinId, "end_session", {
+      session_id: sessionId,
     });
 
     return response.success(res, result, "Session ended successfully", 200);
@@ -632,3 +916,4 @@ exports.getRecyclableWeightOverTime = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
+

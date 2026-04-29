@@ -1,5 +1,5 @@
 const mqtt = require("mqtt");
-const { MQTT_TELEMETRY_TOPIC, MQTT_URL } = require("../config/mqtt.config");
+const { MQTT_COMMAND_TOPIC_PREFIX, MQTT_TELEMETRY_TOPIC, MQTT_URL } = require("../config/mqtt.config");
 const { recordBinTelemetry } = require("./bin_telemetry.service");
 
 let client;
@@ -88,7 +88,27 @@ function stopMqttListener() {
   client = undefined;
 }
 
+function publishBinCommand(binId, command, payload = {}) {
+  if (!client || !client.connected) {
+    console.warn("[MQTT] Command skipped because MQTT is not connected:", { binId, command });
+    return false;
+  }
+
+  const topic = `${MQTT_COMMAND_TOPIC_PREFIX}/${Number(binId)}/command`;
+  const message = JSON.stringify({
+    command,
+    bin_id: Number(binId),
+    ...payload,
+    sent_at: new Date().toISOString(),
+  });
+
+  client.publish(topic, message, { qos: 0 });
+  console.log("[MQTT] Command published:", { topic, message });
+  return true;
+}
+
 module.exports = {
   startMqttListener,
   stopMqttListener,
+  publishBinCommand,
 };

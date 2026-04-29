@@ -93,7 +93,10 @@ model User {
 model RecyclingSession {
   id           Int             @id @default(autoincrement())
   user_id      Int?
+  bin_id       Int?
   total_co2 Decimal @db.Decimal(10, 2) @default("0.00")
+  start_weight Decimal? @db.Decimal(8, 2)
+  final_weight Decimal? @db.Decimal(8, 2)
 
   started_at   DateTime @default(now())
   ended_at     DateTime?
@@ -103,10 +106,12 @@ model RecyclingSession {
   updated_at   DateTime        @updatedAt
 
   user         User?            @relation(fields: [user_id], references: [id])
+  bin          Bin?             @relation(fields: [bin_id], references: [id], onDelete: SetNull)
   items        RecyclingItem[]
   points_transactions PointsTransaction[]
 
   @@index([user_id])
+  @@index([bin_id])
   @@map("recycling_sessions")
 }
 
@@ -221,8 +226,9 @@ model Bin {
   status          String     @db.VarChar(30) @default("unknown")
   last_seen_at    DateTime?
 
-  items RecyclingItem[]
-  logs  BinLog[]
+  items    RecyclingItem[]
+  logs     BinLog[]
+  sessions RecyclingSession[]
 
   @@map("bins")
 }
