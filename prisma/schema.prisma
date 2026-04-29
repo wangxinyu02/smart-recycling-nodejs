@@ -216,10 +216,28 @@ model Bin {
   id              Int        @id @default(autoincrement())
   name            String?    @db.VarChar(120)
   material        material_type
+  max_weight      Decimal?   @db.Decimal(8, 2)
+  current_weight  Decimal    @db.Decimal(8, 2) @default("0.00")
+  status          String     @db.VarChar(30) @default("unknown")
+  last_seen_at    DateTime?
 
   items RecyclingItem[]
+  logs  BinLog[]
 
   @@map("bins")
+}
+
+model BinLog {
+  id         Int      @id @default(autoincrement())
+  bin_id     Int
+  weight     Decimal  @db.Decimal(8, 2)
+  created_at DateTime @default(now())
+
+  bin        Bin      @relation(fields: [bin_id], references: [id], onDelete: Cascade)
+
+  @@index([bin_id])
+  @@index([created_at])
+  @@map("bin_logs")
 }
 
 model OtpCode {

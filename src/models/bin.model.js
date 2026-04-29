@@ -5,6 +5,10 @@ const selectBin = {
   id: true,
   name: true,
   material: true,
+  max_weight: true,
+  current_weight: true,
+  status: true,
+  last_seen_at: true,
 };
 
 module.exports = {
@@ -13,6 +17,7 @@ module.exports = {
       data: {
         name: data.name ?? null,
         material: data.material,
+        ...(data.max_weight !== undefined ? { max_weight: data.max_weight } : {}),
       },
       select: selectBin,
     });
@@ -67,8 +72,33 @@ module.exports = {
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.material !== undefined ? { material: data.material } : {}),
+        ...(data.max_weight !== undefined ? { max_weight: data.max_weight } : {}),
+        ...(data.current_weight !== undefined ? { current_weight: data.current_weight } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.last_seen_at !== undefined ? { last_seen_at: data.last_seen_at } : {}),
       },
       select: selectBin,
+    });
+  },
+
+  listBinLogs: ({ bin_id, skip = 0, take = 50 }) => {
+    return prisma.binLog.findMany({
+      where: { bin_id: Number(bin_id) },
+      select: {
+        id: true,
+        bin_id: true,
+        weight: true,
+        created_at: true,
+      },
+      orderBy: { created_at: "desc" },
+      skip,
+      take,
+    });
+  },
+
+  countBinLogs: ({ bin_id }) => {
+    return prisma.binLog.count({
+      where: { bin_id: Number(bin_id) },
     });
   },
 

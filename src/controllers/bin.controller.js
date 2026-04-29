@@ -3,10 +3,25 @@
 const binModel = require("../models/bin.model");
 const response = require("../utils/response.utils");
 const { MATERIALS } = require("../config/material.config");
+const { toNumberOrNull } = require("../utils/number.utils");
+
+function parseMaxWeight(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const maxWeight = toNumberOrNull(value);
+  if (maxWeight === null || maxWeight <= 0) {
+    const err = new Error("max_weight must be greater than 0");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return maxWeight.toFixed(2);
+}
 
 exports.createBin = async (req, res) => {
   try {
-    const { name, material } = req.body;
+    const { name, material, max_weight } = req.body;
 
     if (!material) return response.error(res, "material is required", 400);
     if (!MATERIALS.includes(String(material))) {
@@ -24,12 +39,13 @@ exports.createBin = async (req, res) => {
     const created = await binModel.createBin({
       name: cleanName,
       material: String(material),
+      max_weight: parseMaxWeight(max_weight),
     });
 
     return response.success(res, created, "Bin created successfully", 201);
   } catch (err) {
     console.error("createBin error:", err);
-    return response.error(res, "Internal Server Error", 500, err.message);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
   }
 };
 
@@ -102,7 +118,7 @@ exports.updateBin = async (req, res) => {
     const existing = await binModel.getBinById(binId);
     if (!existing) return response.error(res, "Bin not found", 404);
 
-    const { name, material } = req.body;
+    const { name, material, max_weight } = req.body;
     const data = {};
 
     if (name !== undefined) {
@@ -123,6 +139,10 @@ exports.updateBin = async (req, res) => {
       data.material = String(material);
     }
 
+    if (max_weight !== undefined) {
+      data.max_weight = parseMaxWeight(max_weight);
+    }
+
     if (Object.keys(data).length === 0) {
       return response.error(res, "No fields to update", 400);
     }
@@ -131,6 +151,45 @@ exports.updateBin = async (req, res) => {
     return response.success(res, updated, "Bin updated successfully", 200);
   } catch (err) {
     console.error("updateBin error:", err);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
+exports.listBinLogs = async (req, res) => {
+  try {
+    const binId = Number(req.params.id);
+    if (!Number.isInteger(binId) || binId <= 0) {
+      return response.error(res, "Invalid bin id", 400);
+    }
+
+    const existing = await binModel.getBinById(binId);
+    if (!existing) return response.error(res, "Bin not found", 404);
+
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      binModel.listBinLogs({ bin_id: binId, skip, take: limit }),
+      binModel.countBinLogs({ bin_id: binId }),
+    ]);
+
+    return response.success(
+      res,
+      {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.ceil(total / limit),
+        },
+      },
+      "Bin logs retrieved",
+      200
+    );
+  } catch (err) {
+    console.error("listBinLogs error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
