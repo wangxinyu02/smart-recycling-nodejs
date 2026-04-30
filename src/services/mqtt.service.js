@@ -32,7 +32,9 @@ async function handleTelemetryMessage(topic, message) {
     const result = await recordBinTelemetry(payload);
     console.log("[MQTT] Telemetry stored:", {
       bin_id: result.bin.id,
-      log_id: result.log.id,
+      log_id: result.log?.id ?? null,
+      log_inserted: result.log_inserted,
+      log_reason: result.log_reason,
       current_weight: result.bin.current_weight,
       status: result.bin.status,
       last_seen_at: result.bin.last_seen_at,

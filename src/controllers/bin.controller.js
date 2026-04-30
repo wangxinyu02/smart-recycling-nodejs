@@ -19,6 +19,28 @@ function parseMaxWeight(value) {
   return maxWeight.toFixed(2);
 }
 
+function parseLogRange(value) {
+  const range = value ? String(value) : "today";
+  const now = new Date();
+
+  if (range === "today") {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return { range, created_at_gte: start };
+  }
+
+  if (range === "7_days") {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    return { range, created_at_gte: start };
+  }
+
+  const err = new Error("Invalid range. Allowed: today, 7_days");
+  err.statusCode = 400;
+  throw err;
+}
+
 exports.createBin = async (req, res) => {
   try {
     const { name, material, max_weight } = req.body;
@@ -168,10 +190,11 @@ exports.listBinLogs = async (req, res) => {
     const page = Math.max(parseInt(req.query.page || "1", 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 100);
     const skip = (page - 1) * limit;
+    const { range, created_at_gte } = parseLogRange(req.query.range);
 
     const [items, total] = await Promise.all([
-      binModel.listBinLogs({ bin_id: binId, skip, take: limit }),
-      binModel.countBinLogs({ bin_id: binId }),
+      binModel.listBinLogs({ bin_id: binId, skip, take: limit, created_at_gte }),
+      binModel.countBinLogs({ bin_id: binId, created_at_gte }),
     ]);
 
     return response.success(
@@ -184,12 +207,15 @@ exports.listBinLogs = async (req, res) => {
           total,
           total_pages: Math.ceil(total / limit),
         },
+        filter: {
+          range,
+        },
       },
       "Bin logs retrieved",
       200
     );
   } catch (err) {
     console.error("listBinLogs error:", err);
-    return response.error(res, "Internal Server Error", 500, err.message);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
   }
 };

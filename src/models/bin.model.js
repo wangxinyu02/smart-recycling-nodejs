@@ -81,9 +81,12 @@ module.exports = {
     });
   },
 
-  listBinLogs: ({ bin_id, skip = 0, take = 50 }) => {
+  listBinLogs: ({ bin_id, skip = 0, take = 50, created_at_gte }) => {
     return prisma.binLog.findMany({
-      where: { bin_id: Number(bin_id) },
+      where: {
+        bin_id: Number(bin_id),
+        ...(created_at_gte ? { created_at: { gte: created_at_gte } } : {}),
+      },
       select: {
         id: true,
         bin_id: true,
@@ -96,9 +99,12 @@ module.exports = {
     });
   },
 
-  countBinLogs: ({ bin_id }) => {
+  countBinLogs: ({ bin_id, created_at_gte }) => {
     return prisma.binLog.count({
-      where: { bin_id: Number(bin_id) },
+      where: {
+        bin_id: Number(bin_id),
+        ...(created_at_gte ? { created_at: { gte: created_at_gte } } : {}),
+      },
     });
   },
 

@@ -3,6 +3,8 @@ const { round2, toNumberOrNull } = require("../utils/number.utils");
 
 const DEFAULT_STATUS = "unknown";
 const MAX_STATUS_LENGTH = 30;
+const LOG_WEIGHT_CHANGE_THRESHOLD_KG = 0.01;
+const LOG_INTERVAL_MS = 10 * 60 * 1000; // 
 
 function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
@@ -24,6 +26,22 @@ function normalizeStatus(status, currentWeight, maxWeight) {
   }
 
   return DEFAULT_STATUS;
+}
+
+function shouldCreateBinLog(lastLog, currentWeight, seenAt) {
+  if (!lastLog) return true;
+
+  const lastWeight = toNumberOrNull(lastLog.weight);
+  if (lastWeight === null) return true;
+
+  const weightChanged =
+    Math.abs(currentWeight - lastWeight) > LOG_WEIGHT_CHANGE_THRESHOLD_KG;
+  if (weightChanged) return true;
+
+  const lastCreatedAt = lastLog.created_at ? new Date(lastLog.created_at) : null;
+  if (!lastCreatedAt || Number.isNaN(lastCreatedAt.getTime())) return true;
+
+  return seenAt.getTime() - lastCreatedAt.getTime() >= LOG_INTERVAL_MS;
 }
 
 function parseTelemetryPayload(payload) {
@@ -101,25 +119,59 @@ async function recordBinTelemetry(payload) {
       },
     });
 
-    const log = await tx.binLog.create({
-      data: {
+    const lastLog = await tx.binLog.findFirst({
+      where: {
         bin_id: telemetry.binId,
-        weight: telemetry.currentWeight.toFixed(2),
-        created_at: telemetry.seenAt,
       },
       select: {
         id: true,
-        bin_id: true,
         weight: true,
         created_at: true,
       },
+      orderBy: {
+        created_at: "desc",
+      },
     });
 
-    return { bin: updatedBin, log };
+    const shouldCreateLog = shouldCreateBinLog(
+      lastLog,
+      telemetry.currentWeight,
+      telemetry.seenAt,
+    );
+
+    const log = shouldCreateLog
+      ? await tx.binLog.create({
+          data: {
+            bin_id: telemetry.binId,
+            weight: telemetry.currentWeight.toFixed(2),
+            created_at: telemetry.seenAt,
+          },
+          select: {
+            id: true,
+            bin_id: true,
+            weight: true,
+            created_at: true,
+          },
+        })
+      : null;
+
+    return {
+      bin: updatedBin,
+      log,
+      log_inserted: Boolean(log),
+      log_reason: shouldCreateLog
+        ? "weight_changed_or_interval_elapsed"
+        : "skipped_no_significant_change",
+      log_policy: {
+        min_weight_change_kg: LOG_WEIGHT_CHANGE_THRESHOLD_KG,
+        max_interval_minutes: LOG_INTERVAL_MS / 60000,
+      },
+    };
   });
 }
 
 module.exports = {
   parseTelemetryPayload,
   recordBinTelemetry,
+  shouldCreateBinLog,
 };
