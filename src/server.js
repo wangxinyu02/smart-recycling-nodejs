@@ -3,13 +3,16 @@
 require("dotenv").config();
 const app = require("./app");
 const { startMqttListener, stopMqttListener } = require("./services/mqtt.service");
+const { attachLiveWeightWebSocket } = require("./services/live_weight_ws.service");
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   startMqttListener();
 });
+
+attachLiveWeightWebSocket(server);
 
 process.on("SIGINT", () => {
   stopMqttListener();
