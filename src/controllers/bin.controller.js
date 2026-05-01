@@ -177,6 +177,26 @@ exports.updateBin = async (req, res) => {
   }
 };
 
+exports.deleteBin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const binId = Number(id);
+
+    if (!Number.isInteger(binId) || binId <= 0) {
+      return response.error(res, "Invalid bin id", 400);
+    }
+
+    const existing = await binModel.getBinById(binId);
+    if (!existing) return response.error(res, "Bin not found", 404);
+
+    const deleted = await binModel.deleteBinById(binId);
+    return response.success(res, deleted, "Bin deleted successfully", 200);
+  } catch (err) {
+    console.error("deleteBin error:", err);
+    return response.error(res, err.message || "Internal Server Error", err.statusCode || 500);
+  }
+};
+
 exports.listBinLogs = async (req, res) => {
   try {
     const binId = Number(req.params.id);

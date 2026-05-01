@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.post("/bins", authenticate, authorize("admin"), binController.createBin);
 router.patch("/bins/:id", authenticate, authorize("admin"), binController.updateBin);
-// router.delete("/bins/:id", authenticate, authorize("admin"), binController.deleteBin);
+router.delete("/bins/:id", authenticate, authorize("admin"), binController.deleteBin);
 router.get("/bins", authenticate, authorize("admin"), binController.listBins);
 router.get("/bins/:id/logs", authenticate, authorize("admin"), binController.listBinLogs);
 router.get("/bins/:id", authenticate, authorize("admin"), binController.getBinById);

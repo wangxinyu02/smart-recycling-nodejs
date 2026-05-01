@@ -83,6 +83,13 @@ module.exports = {
     });
   },
 
+  deleteBinById: (id) => {
+    return prisma.bin.delete({
+      where: { id: Number(id) },
+      select: selectBin,
+    });
+  },
+
   listBinLogs: ({ bin_id, skip = 0, take = 50, created_at_gte }) => {
     return prisma.binLog.findMany({
       where: {
