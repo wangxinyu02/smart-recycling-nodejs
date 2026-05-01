@@ -9,6 +9,8 @@ const selectBin = {
   current_weight: true,
   status: true,
   last_seen_at: true,
+  half_alert_active: true,
+  full_alert_active: true,
 };
 
 module.exports = {

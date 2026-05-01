@@ -38,6 +38,8 @@ async function handleTelemetryMessage(topic, message) {
       current_weight: result.bin.current_weight,
       status: result.bin.status,
       last_seen_at: result.bin.last_seen_at,
+      alert_notifications_created: result.alert_notifications_created,
+      alert_push_result: result.alert_push_result,
     });
     await broadcastBinTelemetryUpdate(result.bin.id);
   } catch (err) {

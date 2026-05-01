@@ -1,10 +1,16 @@
 const prisma = require("../config/prisma");
 const { round2, toNumberOrNull } = require("../utils/number.utils");
+const {
+  createAdminBinAlertNotifications,
+  evaluateBinAlerts,
+  logBinAlertResets,
+  sendBinAlertPushNotifications,
+} = require("./bin_alert.service");
 
 const DEFAULT_STATUS = "unknown";
 const MAX_STATUS_LENGTH = 30;
-const LOG_WEIGHT_CHANGE_THRESHOLD_KG = 0.01;
-const LOG_INTERVAL_MS = 10 * 60 * 1000; // 
+const LOG_WEIGHT_CHANGE_THRESHOLD_KG = 0.01; // 0.01 kg
+const LOG_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
@@ -83,12 +89,18 @@ function parseTelemetryPayload(payload) {
 async function recordBinTelemetry(payload) {
   const telemetry = parseTelemetryPayload(payload);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
+    let alertPushJobs = [];
+
     const existingBin = await tx.bin.findUnique({
       where: { id: telemetry.binId },
       select: {
         id: true,
+        name: true,
+        material: true,
         max_weight: true,
+        half_alert_active: true,
+        full_alert_active: true,
       },
     });
 
@@ -100,6 +112,11 @@ async function recordBinTelemetry(payload) {
 
     const maxWeight = toNumberOrNull(existingBin.max_weight);
     const status = normalizeStatus(telemetry.status, telemetry.currentWeight, maxWeight);
+    const alertResult = evaluateBinAlerts({
+      bin: existingBin,
+      currentWeight: telemetry.currentWeight,
+      maxWeight,
+    });
 
     const updatedBin = await tx.bin.update({
       where: { id: telemetry.binId },
@@ -107,6 +124,7 @@ async function recordBinTelemetry(payload) {
         current_weight: telemetry.currentWeight.toFixed(2),
         status,
         last_seen_at: telemetry.seenAt,
+        ...alertResult.alertUpdates,
       },
       select: {
         id: true,
@@ -116,8 +134,18 @@ async function recordBinTelemetry(payload) {
         current_weight: true,
         status: true,
         last_seen_at: true,
+        half_alert_active: true,
+        full_alert_active: true,
       },
     });
+
+    const alertNotificationResult = await createAdminBinAlertNotifications(tx, {
+      binId: telemetry.binId,
+      notifications: alertResult.notifications,
+    });
+    alertPushJobs = alertNotificationResult.pushJobs;
+
+    logBinAlertResets(telemetry.binId, alertResult.resetLogs);
 
     const lastLog = await tx.binLog.findFirst({
       where: {
@@ -166,8 +194,17 @@ async function recordBinTelemetry(payload) {
         min_weight_change_kg: LOG_WEIGHT_CHANGE_THRESHOLD_KG,
         max_interval_minutes: LOG_INTERVAL_MS / 60000,
       },
+      alert_notifications_created: alertNotificationResult.count,
+      alert_push_jobs: alertPushJobs,
     };
   });
+
+  const alertPushResult = await sendBinAlertPushNotifications(result.alert_push_jobs);
+
+  return {
+    ...result,
+    alert_push_result: alertPushResult,
+  };
 }
 
 module.exports = {

@@ -225,6 +225,8 @@ model Bin {
   current_weight  Decimal    @db.Decimal(8, 2) @default("0.00")
   status          String     @db.VarChar(30) @default("unknown")
   last_seen_at    DateTime?
+  half_alert_active Boolean  @default(false)
+  full_alert_active Boolean  @default(false)
 
   items    RecyclingItem[]
   logs     BinLog[]

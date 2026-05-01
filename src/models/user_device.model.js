@@ -9,20 +9,39 @@ module.exports = {
     });
 
     if (existing) {
-      return prisma.userDevice.update({
+      const updated = await prisma.userDevice.update({
         where: { id: existing.id },
         data: {
           user_id: userId,
         },
+        select: { id: true, user_id: true, fcm_token: true, created_at: true },
       });
+
+      console.log("[UserDevice] Moved existing FCM token to user", {
+        device_id: updated.id,
+        previous_user_id: existing.user_id,
+        user_id: updated.user_id,
+        token_suffix: String(updated.fcm_token || "").slice(-12),
+      });
+
+      return updated;
     }
 
-    return prisma.userDevice.create({
+    const created = await prisma.userDevice.create({
       data: {
         user_id: userId,
         fcm_token: fcmToken,
       },
+      select: { id: true, user_id: true, fcm_token: true, created_at: true },
     });
+
+    console.log("[UserDevice] Stored new FCM token", {
+      device_id: created.id,
+      user_id: created.user_id,
+      token_suffix: String(created.fcm_token || "").slice(-12),
+    });
+
+    return created;
   },
 
   getActiveTokensByUserId: async (userId) => {

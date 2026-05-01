@@ -28,6 +28,13 @@ module.exports = {
   sendToUser: async ({ userId, title, body, data = {} }) => {
     const devices = await userDeviceModel.getActiveTokensByUserId(userId);
 
+    console.log("[Push] User devices selected", {
+      user_id: userId,
+      token_count: devices.length,
+      device_ids: devices.map((device) => device.id),
+      token_suffixes: devices.map((device) => String(device.fcm_token || "").slice(-12)),
+    });
+
     if (!devices.length) {
       return { sent: 0, failed: 0, removed_tokens: 0 };
     }
@@ -45,12 +52,27 @@ module.exports = {
           data,
         });
 
-        await admin.messaging().send(message);
+        const response = await admin.messaging().send(message);
         sent += 1;
+        console.log("[Push] Firebase send success", {
+          user_id: userId,
+          device_id: device.id,
+          token_suffix: String(device.fcm_token || "").slice(-12),
+          title,
+          response,
+        });
       } catch (err) {
         failed += 1;
 
         const code = err?.errorInfo?.code || err?.code || "";
+
+        console.error("[Push] Firebase send failed", {
+          user_id: userId,
+          device_id: device.id,
+          token_suffix: String(device.fcm_token || "").slice(-12),
+          code,
+          message: err.message,
+        });
 
         if (code.includes("registration-token-not-registered") || code.includes("invalid-registration-token")) {
           invalidDeviceIds.push(device.id);

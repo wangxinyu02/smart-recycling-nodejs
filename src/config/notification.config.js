@@ -2,8 +2,16 @@
 
 const templates = {
   bin_alert: {
-    title: "Bin Alert",
-    message: "{bin_name} bin is nearly full ({weight} kg)",
+    variants: {
+      half_full: {
+        title: "{bin_name} Half Full",
+        message: "{bin_name} is 50% full. Current weight: {current_weight}kg / {max_weight}kg.",
+      },
+      full: {
+        title: "{bin_name} Almost Full",
+        message: "{bin_name} is almost full. Please empty the bin soon. Current weight: {current_weight}kg / {max_weight}kg.",
+      },
+    },
   },
 
   session_claimed: {
@@ -36,10 +44,18 @@ const replaceParams = (text, params = {}) => {
 
 // Build notification from template
 const buildNotification = (type, params = {}) => {
-  const template = templates[type];
+  const baseTemplate = templates[type];
 
-  if (!template) {
+  if (!baseTemplate) {
     throw new Error(`Notification template not found for type: ${type}`);
+  }
+
+  const template = params.variant
+    ? baseTemplate.variants?.[params.variant]
+    : baseTemplate;
+
+  if (!template?.title || !template?.message) {
+    throw new Error(`Notification template variant not found for type: ${type}`);
   }
 
   return {
