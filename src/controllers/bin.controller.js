@@ -19,6 +19,47 @@ function parseMaxWeight(value) {
   return maxWeight.toFixed(2);
 }
 
+function parseNullableText(value, fieldName, maxLength) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    const err = new Error(`${fieldName} must be a string`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cleanValue = value.trim();
+  if (cleanValue.length === 0) return null;
+  if (cleanValue.length > maxLength) {
+    const err = new Error(`${fieldName} is too long (max ${maxLength})`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return cleanValue;
+}
+
+async function parseDeviceId(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const deviceId = Number(value);
+  if (!Number.isInteger(deviceId) || deviceId <= 0) {
+    const err = new Error("Invalid device id");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const device = await binModel.findActiveDeviceById(deviceId);
+  if (!device) {
+    const err = new Error("Device not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return deviceId;
+}
+
 function parseLogRange(value) {
   const range = value ? String(value) : "today";
   const now = new Date();
@@ -43,25 +84,23 @@ function parseLogRange(value) {
 
 exports.createBin = async (req, res) => {
   try {
-    const { name, material, max_weight } = req.body;
+    const { name, material, max_weight, location, device_id } = req.body;
 
     if (!material) return response.error(res, "material is required", 400);
     if (!MATERIALS.includes(String(material))) {
       return response.error(res, `Invalid material. Allowed: ${MATERIALS.join(", ")}`, 400);
     }
 
-    let cleanName = null;
-    if (name !== undefined && name !== null) {
-      if (typeof name !== "string") return response.error(res, "name must be a string", 400);
-      cleanName = name.trim();
-      if (cleanName.length === 0) cleanName = null;
-      if (cleanName && cleanName.length > 120) return response.error(res, "name is too long (max 120)", 400);
-    }
+    const cleanName = parseNullableText(name, "name", 120) ?? null;
+    const cleanLocation = parseNullableText(location, "location", 150) ?? null;
+    const deviceId = await parseDeviceId(device_id);
 
     const created = await binModel.createBin({
       name: cleanName,
       material: String(material),
+      location: cleanLocation,
       max_weight: parseMaxWeight(max_weight),
+      ...(deviceId !== undefined ? { device_id: deviceId } : {}),
     });
 
     return response.success(res, created, "Bin created successfully", 201);
@@ -103,10 +142,7 @@ exports.listBins = async (req, res) => {
       return response.error(res, `Invalid material filter. Allowed: ${MATERIALS.join(", ")}`, 400);
     }
 
-    const [items, total] = await Promise.all([
-      binModel.listBins({ skip, take: limit, q, material }), 
-      binModel.countBins({ q, material }),
-    ]);
+    const [items, total] = await Promise.all([binModel.listBins({ skip, take: limit, q, material }), binModel.countBins({ q, material })]);
 
     return response.success(
       res,
@@ -120,7 +156,7 @@ exports.listBins = async (req, res) => {
         },
       },
       "Bins retrieved",
-      200
+      200,
     );
   } catch (err) {
     console.error("listBins error:", err);
@@ -140,18 +176,11 @@ exports.updateBin = async (req, res) => {
     const existing = await binModel.getBinById(binId);
     if (!existing) return response.error(res, "Bin not found", 404);
 
-    const { name, material, max_weight } = req.body;
+    const { name, material, max_weight, location, device_id } = req.body;
     const data = {};
 
     if (name !== undefined) {
-      if (name === null) {
-        data.name = null;
-      } else {
-        if (typeof name !== "string") return response.error(res, "name must be a string", 400);
-        const cleanName = name.trim();
-        data.name = cleanName.length === 0 ? null : cleanName;
-        if (data.name && data.name.length > 120) return response.error(res, "name is too long (max 120)", 400);
-      }
+      data.name = parseNullableText(name, "name", 120);
     }
 
     if (material !== undefined) {
@@ -163,6 +192,14 @@ exports.updateBin = async (req, res) => {
 
     if (max_weight !== undefined) {
       data.max_weight = parseMaxWeight(max_weight);
+    }
+
+    if (location !== undefined) {
+      data.location = parseNullableText(location, "location", 150);
+    }
+
+    if (device_id !== undefined) {
+      data.device_id = await parseDeviceId(device_id);
     }
 
     if (Object.keys(data).length === 0) {
@@ -232,7 +269,7 @@ exports.listBinLogs = async (req, res) => {
         },
       },
       "Bin logs retrieved",
-      200
+      200,
     );
   } catch (err) {
     console.error("listBinLogs error:", err);

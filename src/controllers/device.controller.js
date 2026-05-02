@@ -93,12 +93,17 @@ exports.listDevices = async (req, res) => {
     const page = Math.max(parseInt(req.query.page || "1", 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
     const q = req.query.q ? String(req.query.q) : "";
+    const availableForBinId = req.query.available_for_bin_id ? Number(req.query.available_for_bin_id) : undefined;
+
+    if (availableForBinId !== undefined && (!Number.isInteger(availableForBinId) || availableForBinId <= 0)) {
+      return response.error(res, "Invalid bin id", 400);
+    }
 
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      deviceModel.listDevices({ skip, take: limit, q }),
-      deviceModel.countDevices({ q }),
+      deviceModel.listDevices({ skip, take: limit, q, available_for_bin_id: availableForBinId }),
+      deviceModel.countDevices({ q, available_for_bin_id: availableForBinId }),
     ]);
 
     return response.success(

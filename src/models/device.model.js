@@ -44,15 +44,43 @@ module.exports = {
     });
   },
 
-  listDevices: ({ skip = 0, take = 20, q = "" }) => {
+  listDevices: ({ skip = 0, take = 20, q = "", available_for_bin_id }) => {
     const keyword = q?.trim();
+    const filters = [
+      ...(keyword
+        ? [
+            {
+              OR: [{ name: { contains: keyword } }, { mac_address: { contains: keyword } }],
+            },
+          ]
+        : []),
+      ...(available_for_bin_id
+        ? [
+            {
+              OR: [
+                {
+                  bin_maps: {
+                    none: {
+                      deleted_at: null,
+                    },
+                  },
+                },
+                {
+                  bin_maps: {
+                    some: {
+                      bin_id: Number(available_for_bin_id),
+                      deleted_at: null,
+                    },
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
+    ];
     const where = {
       deleted_at: null,
-      ...(keyword
-        ? {
-            OR: [{ name: { contains: keyword } }, { mac_address: { contains: keyword } }],
-          }
-        : {}),
+      ...(filters.length ? { AND: filters } : {}),
     };
 
     return prisma.device.findMany({
@@ -64,15 +92,43 @@ module.exports = {
     });
   },
 
-  countDevices: ({ q = "" }) => {
+  countDevices: ({ q = "", available_for_bin_id }) => {
     const keyword = q?.trim();
+    const filters = [
+      ...(keyword
+        ? [
+            {
+              OR: [{ name: { contains: keyword } }, { mac_address: { contains: keyword } }],
+            },
+          ]
+        : []),
+      ...(available_for_bin_id
+        ? [
+            {
+              OR: [
+                {
+                  bin_maps: {
+                    none: {
+                      deleted_at: null,
+                    },
+                  },
+                },
+                {
+                  bin_maps: {
+                    some: {
+                      bin_id: Number(available_for_bin_id),
+                      deleted_at: null,
+                    },
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
+    ];
     const where = {
       deleted_at: null,
-      ...(keyword
-        ? {
-            OR: [{ name: { contains: keyword } }, { mac_address: { contains: keyword } }],
-          }
-        : {}),
+      ...(filters.length ? { AND: filters } : {}),
     };
 
     return prisma.device.count({ where });
