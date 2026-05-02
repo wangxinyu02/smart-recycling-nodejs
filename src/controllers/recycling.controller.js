@@ -31,6 +31,10 @@ exports.startSession = async (req, res) => {
       return response.error(res, "Invalid bin_id", 400);
     }
 
+    // TODO: Re-enable active-session protection after implementing proper cancelSession flow.
+    // Currently commented out because users may tap Start and then cancel.
+    // A better solution is to add cancelled_at to recycling_sessions and exclude cancelled sessions
+    // from the active-session check.
     // const activeSession = await prisma.recyclingSession.findFirst({
     //   where: {
     //     bin_id: binId,
@@ -532,19 +536,21 @@ exports.endSession = async (req, res) => {
   }
 };
 
+const QR_SECRET = process.env.QR_SECRET;
+
+if (!QR_SECRET || QR_SECRET.trim().length < 32) {
+  throw new Error("QR_SECRET is required and must be at least 32 characters long");
+}
+
+const QR_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
 function generateQrPayload(sessionId) {
   const ts = Date.now();
   const nonce = crypto.randomBytes(8).toString("hex");
-  const data = `${sessionId}|${ts}|${nonce}`;
-  const secret = process.env.QR_SECRET;
-
-  const sig = crypto.createHmac("sha256", secret).update(data).digest("hex");
+  const sig = signQr({ sid: sessionId, ts, nonce });
 
   return `sid=${sessionId}&ts=${ts}&nonce=${nonce}&sig=${sig}`;
 }
-
-const QR_SECRET = process.env.QR_SECRET || "change-me";
-const QR_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 function safeEqual(a, b) {
   const ab = Buffer.from(String(a));
