@@ -164,6 +164,28 @@ module.exports = {
     return count > 0;
   },
 
+  findActiveDeviceByBinId: async (binId) => {
+    const map = await prisma.binDeviceMap.findFirst({
+      where: {
+        bin_id: Number(binId),
+        deleted_at: null,
+        device: {
+          deleted_at: null,
+        },
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      select: {
+        device: {
+          select: selectDevice,
+        },
+      },
+    });
+
+    return map?.device ?? null;
+  },
+
   softDeleteDeviceById: (id) => {
     return prisma.device.update({
       where: { id: Number(id) },

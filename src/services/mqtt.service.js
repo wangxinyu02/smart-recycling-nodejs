@@ -1,5 +1,6 @@
 const mqtt = require("mqtt");
-const { MQTT_COMMAND_TOPIC_PREFIX, MQTT_TELEMETRY_TOPIC, MQTT_URL } = require("../config/mqtt.config");
+const { MQTT_DEVICE_COMMAND_TOPIC_PREFIX, MQTT_TELEMETRY_TOPIC, MQTT_URL } = require("../config/mqtt.config");
+const deviceModel = require("../models/device.model");
 const { recordBinTelemetry } = require("./bin_telemetry.service");
 const { broadcastBinTelemetryUpdate } = require("./live_weight_ws.service");
 
@@ -97,23 +98,53 @@ function stopMqttListener() {
   client = undefined;
 }
 
-function publishBinCommand(binId, command, payload = {}) {
-  if (!client || !client.connected) {
-    console.warn("[MQTT] Command skipped because MQTT is not connected:", { binId, command });
+async function publishBinCommand(binId, command, payload = {}) {
+  const numericBinId = Number(binId);
+  const device = await deviceModel.findActiveDeviceByBinId(numericBinId);
+
+  if (!device) {
+    console.warn("[MQTT] No active device assigned to bin; MQTT command not sent.", {
+      binId: numericBinId,
+      command,
+    });
     return false;
   }
 
-  const topic = `${MQTT_COMMAND_TOPIC_PREFIX}/${Number(binId)}/command`;
+  if (!client || !client.connected) {
+    console.warn("[MQTT] Command skipped because MQTT is not connected:", {
+      binId: numericBinId,
+      device_id: device.id,
+      mac_address: device.mac_address,
+      command,
+    });
+    return false;
+  }
+
+  const topic = `${MQTT_DEVICE_COMMAND_TOPIC_PREFIX}/${device.mac_address}/command`;
   const message = JSON.stringify({
     command,
-    bin_id: Number(binId),
+    bin_id: numericBinId,
+    device_id: device.id,
+    mac_address: device.mac_address,
     ...payload,
     sent_at: new Date().toISOString(),
   });
 
-  client.publish(topic, message, { qos: 0 });
-  console.log("[MQTT] Command published:", { topic, message });
-  return true;
+  try {
+    client.publish(topic, message, { qos: 0 });
+    console.log("[MQTT] Command published:", { topic, message });
+    return true;
+  } catch (err) {
+    console.error("[MQTT] Failed to publish command:", {
+      topic,
+      binId: numericBinId,
+      device_id: device.id,
+      mac_address: device.mac_address,
+      command,
+      error: err.message,
+    });
+    return false;
+  }
 }
 
 module.exports = {

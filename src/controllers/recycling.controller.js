@@ -75,7 +75,7 @@ exports.startSession = async (req, res) => {
       },
     });
 
-    const mqttCommandSent = publishBinCommand(binId, "start_session", {
+    const mqttCommandSent = await publishBinCommand(binId, "start_session", {
       session_id: session.id,
     });
 
@@ -525,7 +525,7 @@ exports.endSession = async (req, res) => {
       };
     });
 
-    result.mqtt_command_sent = publishBinCommand(commandBinId, "end_session", {
+    result.mqtt_command_sent = await publishBinCommand(commandBinId, "end_session", {
       session_id: sessionId,
     });
 
