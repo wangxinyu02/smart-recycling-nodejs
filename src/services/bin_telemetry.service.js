@@ -16,6 +16,10 @@ function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function normalizeMacAddress(macAddress) {
+  return String(macAddress).trim().toUpperCase();
+}
+
 function normalizeStatus(status, currentWeight, maxWeight) {
   const rawStatus = firstDefined(status);
 
@@ -57,9 +61,11 @@ function parseTelemetryPayload(payload) {
     throw err;
   }
 
-  const binId = Number(firstDefined(payload.bin_id, payload.binId, payload.id));
-  if (!Number.isInteger(binId) || binId <= 0) {
-    const err = new Error("Telemetry payload requires a valid bin_id");
+  const rawMacAddress = firstDefined(payload.mac_address, payload.macAddress, payload.mac);
+  const macAddress = rawMacAddress === undefined ? "" : normalizeMacAddress(rawMacAddress);
+
+  if (!macAddress) {
+    const err = new Error("Telemetry payload requires a valid mac_address");
     err.statusCode = 400;
     throw err;
   }
@@ -79,36 +85,125 @@ function parseTelemetryPayload(payload) {
   const roundedCurrentWeight = round2(currentWeight);
 
   return {
-    binId,
+    macAddress,
     currentWeight: roundedCurrentWeight,
     status: payload.status,
     seenAt,
   };
 }
 
+async function findOrCreateDeviceByMacAddress(macAddress) {
+  const existing = await prisma.device.findUnique({
+    where: { mac_address: macAddress },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      mac_address: true,
+      deleted_at: true,
+    },
+  });
+
+  if (existing) {
+    return {
+      device: existing,
+      created: false,
+    };
+  }
+
+  try {
+    const created = await prisma.device.create({
+      data: {
+        mac_address: macAddress,
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        mac_address: true,
+        deleted_at: true,
+      },
+    });
+
+    return {
+      device: created,
+      created: true,
+    };
+  } catch (err) {
+    if (err.code !== "P2002") throw err;
+
+    const device = await prisma.device.findUnique({
+      where: { mac_address: macAddress },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        mac_address: true,
+        deleted_at: true,
+      },
+    });
+
+    return {
+      device,
+      created: false,
+    };
+  }
+}
+
 async function recordBinTelemetry(payload) {
   const telemetry = parseTelemetryPayload(payload);
+  const { device, created: deviceCreated } = await findOrCreateDeviceByMacAddress(telemetry.macAddress);
+
+  if (!device) {
+    const err = new Error(`Device not found: ${telemetry.macAddress}`);
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (device.deleted_at) {
+    const err = new Error(`Device is deleted: ${telemetry.macAddress}`);
+    err.statusCode = 400;
+    throw err;
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     let alertPushJobs = [];
 
-    const existingBin = await tx.bin.findUnique({
-      where: { id: telemetry.binId },
+    const activeDeviceMap = await tx.binDeviceMap.findFirst({
+      where: {
+        device_id: device.id,
+        deleted_at: null,
+        bin: {
+          deleted_at: null,
+        },
+      },
       select: {
         id: true,
-        name: true,
-        material: true,
-        max_weight: true,
-        half_alert_active: true,
-        full_alert_active: true,
+        bin_id: true,
+        bin: {
+          select: {
+            id: true,
+            name: true,
+            material: true,
+            max_weight: true,
+            half_alert_active: true,
+            full_alert_active: true,
+          },
+        },
+      },
+      orderBy: {
+        created_at: "desc",
       },
     });
 
-    if (!existingBin) {
-      const err = new Error(`Bin not found: ${telemetry.binId}`);
-      err.statusCode = 404;
+    if (!activeDeviceMap?.bin) {
+      const err = new Error(`Device is not assigned to a bin: ${telemetry.macAddress}`);
+      err.statusCode = 400;
       throw err;
     }
+
+    const binId = activeDeviceMap.bin_id;
+    const existingBin = activeDeviceMap.bin;
 
     const maxWeight = toNumberOrNull(existingBin.max_weight);
     const status = normalizeStatus(telemetry.status, telemetry.currentWeight, maxWeight);
@@ -119,7 +214,7 @@ async function recordBinTelemetry(payload) {
     });
 
     const updatedBin = await tx.bin.update({
-      where: { id: telemetry.binId },
+      where: { id: binId },
       data: {
         current_weight: telemetry.currentWeight.toFixed(2),
         status,
@@ -140,16 +235,16 @@ async function recordBinTelemetry(payload) {
     });
 
     const alertNotificationResult = await createAdminBinAlertNotifications(tx, {
-      binId: telemetry.binId,
+      binId,
       notifications: alertResult.notifications,
     });
     alertPushJobs = alertNotificationResult.pushJobs;
 
-    logBinAlertResets(telemetry.binId, alertResult.resetLogs);
+    logBinAlertResets(binId, alertResult.resetLogs);
 
     const lastLog = await tx.binLog.findFirst({
       where: {
-        bin_id: telemetry.binId,
+        bin_id: binId,
       },
       select: {
         id: true,
@@ -170,7 +265,7 @@ async function recordBinTelemetry(payload) {
     const log = shouldCreateLog
       ? await tx.binLog.create({
           data: {
-            bin_id: telemetry.binId,
+            bin_id: binId,
             weight: telemetry.currentWeight.toFixed(2),
             created_at: telemetry.seenAt,
           },
@@ -184,6 +279,13 @@ async function recordBinTelemetry(payload) {
       : null;
 
     return {
+      device: {
+        id: device.id,
+        name: device.name,
+        type: device.type,
+        mac_address: device.mac_address,
+      },
+      device_created: deviceCreated,
       bin: updatedBin,
       log,
       log_inserted: Boolean(log),
