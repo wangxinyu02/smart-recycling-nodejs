@@ -44,6 +44,17 @@ module.exports = {
     });
   },
 
+  findActiveDuplicateByMacAddress: (mac_address, excludeId) => {
+    return prisma.device.findFirst({
+      where: {
+        mac_address,
+        deleted_at: null,
+        ...(excludeId ? { id: { not: Number(excludeId) } } : {}),
+      },
+      select: selectDevice,
+    });
+  },
+
   listDevices: ({ skip = 0, take = 20, q = "", available_for_bin_id }) => {
     const keyword = q?.trim();
     const filters = [

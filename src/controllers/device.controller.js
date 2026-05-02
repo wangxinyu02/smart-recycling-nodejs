@@ -20,10 +20,6 @@ function isValidId(id) {
   return Number.isInteger(parsedId) && parsedId > 0;
 }
 
-function isPrismaUniqueConstraintError(err) {
-  return err && err.code === "P2002";
-}
-
 exports.createDevice = async (req, res) => {
   try {
     const { name, type, mac_address } = req.body;
@@ -61,9 +57,6 @@ exports.createDevice = async (req, res) => {
     return response.success(res, device, "Device created", 201);
   } catch (err) {
     console.error("createDevice error:", err);
-    if (isPrismaUniqueConstraintError(err)) {
-      return response.error(res, "Device mac_address already exists", 409);
-    }
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
@@ -163,8 +156,8 @@ exports.updateDevice = async (req, res) => {
         return response.error(res, "mac_address cannot be empty", 400);
       }
 
-      const dup = await deviceModel.findActiveByMacAddress(cleanMacAddress);
-      if (dup && dup.id !== Number(id)) {
+      const dup = await deviceModel.findActiveDuplicateByMacAddress(cleanMacAddress, id);
+      if (dup) {
         return response.error(res, "Device mac_address already exists", 409);
       }
 
@@ -179,9 +172,6 @@ exports.updateDevice = async (req, res) => {
     return response.success(res, updated, "Device updated", 200);
   } catch (err) {
     console.error("updateDevice error:", err);
-    if (isPrismaUniqueConstraintError(err)) {
-      return response.error(res, "Device mac_address already exists", 409);
-    }
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };

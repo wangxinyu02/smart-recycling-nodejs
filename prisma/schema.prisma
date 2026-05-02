@@ -310,7 +310,7 @@ model Device {
   id            Int         @id @default(autoincrement())
   name          String?     @db.VarChar(120)
   type          device_type @default(esp32)
-  mac_address   String      @unique @db.VarChar(30)
+  mac_address   String      @db.VarChar(30)
 
   created_at    DateTime    @default(now())
   updated_at    DateTime    @updatedAt
@@ -319,6 +319,7 @@ model Device {
   bin_maps      BinDeviceMap[]
 
   @@index([deleted_at])
+  @@index([mac_address, deleted_at])
   @@map("devices")
 }
 

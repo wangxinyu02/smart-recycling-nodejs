@@ -93,61 +93,65 @@ function parseTelemetryPayload(payload) {
 }
 
 async function findOrCreateDeviceByMacAddress(macAddress) {
-  const existing = await prisma.device.findUnique({
-    where: { mac_address: macAddress },
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      mac_address: true,
-      deleted_at: true,
+  const selectDeviceForTelemetry = {
+    id: true,
+    name: true,
+    type: true,
+    mac_address: true,
+    deleted_at: true,
+  };
+
+  const activeDevices = await prisma.device.findMany({
+    where: {
+      mac_address: macAddress,
+      deleted_at: null,
+    },
+    select: selectDeviceForTelemetry,
+    orderBy: {
+      id: "asc",
     },
   });
 
-  if (existing) {
+  if (activeDevices.length > 1) {
+    const err = new Error(`Multiple active devices found for mac_address: ${macAddress}`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (activeDevices.length === 1) {
     return {
-      device: existing,
+      device: activeDevices[0],
       created: false,
     };
   }
 
-  try {
-    const created = await prisma.device.create({
-      data: {
-        mac_address: macAddress,
-      },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        mac_address: true,
-        deleted_at: true,
-      },
-    });
+  const created = await prisma.device.create({
+    data: {
+      mac_address: macAddress,
+    },
+    select: selectDeviceForTelemetry,
+  });
 
-    return {
-      device: created,
-      created: true,
-    };
-  } catch (err) {
-    if (err.code !== "P2002") throw err;
+  const activeDevicesAfterCreate = await prisma.device.findMany({
+    where: {
+      mac_address: macAddress,
+      deleted_at: null,
+    },
+    select: {
+      id: true,
+    },
+  });
 
-    const device = await prisma.device.findUnique({
-      where: { mac_address: macAddress },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        mac_address: true,
-        deleted_at: true,
-      },
-    });
-
-    return {
-      device,
-      created: false,
-    };
+  if (activeDevicesAfterCreate.length > 1) {
+    const err = new Error(`Multiple active devices found for mac_address: ${macAddress}`);
+    err.statusCode = 409;
+    throw err;
   }
+
+  return {
+    device: created,
+    created: true,
+  };
 }
 
 async function recordBinTelemetry(payload) {
@@ -157,12 +161,6 @@ async function recordBinTelemetry(payload) {
   if (!device) {
     const err = new Error(`Device not found: ${telemetry.macAddress}`);
     err.statusCode = 404;
-    throw err;
-  }
-
-  if (device.deleted_at) {
-    const err = new Error(`Device is deleted: ${telemetry.macAddress}`);
-    err.statusCode = 400;
     throw err;
   }
 
