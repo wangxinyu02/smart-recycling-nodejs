@@ -204,7 +204,13 @@ exports.getSessionById = async (req, res) => {
       return response.error(res, "Session not found", 404);
     }
 
-    if (req.user?.role !== "admin" && req.user?.id !== session.user_id) {
+    const totalCo2 = session.totals?.total_co2_saved_kg ?? session.session?.total_co2 ?? 0;
+    session.impact_message = {
+      headline: `You helped reduce ${totalCo2}kg of CO₂ ✅`,
+      description: buildCo2ImpactMessage(totalCo2).text,
+    };
+
+    if (req.user?.role !== "admin" && req.user?.id !== session.session?.user_id) {
       return response.error(res, "Forbidden", 403);
     }
 
@@ -916,4 +922,3 @@ exports.getRecyclableWeightOverTime = async (req, res) => {
     return response.error(res, "Internal Server Error", 500, err.message);
   }
 };
-

@@ -71,6 +71,8 @@ module.exports = {
       },
       select: {
         id: true,
+        type: true,
+        reference_id: true,
         read_at: true,
       },
     });

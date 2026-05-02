@@ -5,18 +5,18 @@ const templates = {
     variants: {
       half_full: {
         title: "{bin_name} Half Full",
-        message: "{bin_name} is 50% full. Current weight: {current_weight}kg / {max_weight}kg.",
+        message: "{bin_name} has reached 50% capacity. Current weight: {current_weight}kg / {max_weight}kg.",
       },
       full: {
         title: "{bin_name} Almost Full",
-        message: "{bin_name} is almost full. Please empty the bin soon. Current weight: {current_weight}kg / {max_weight}kg.",
+        message: "{bin_name} is almost full🚨 Please empty it soon to avoid overflow. Current weight: {current_weight}kg / {max_weight}kg.",
       },
     },
   },
 
   session_claimed: {
-    title: "Points Earned",
-    message: "You earned {points} points 🎉",
+    title: "You Made an Impact!",
+    message: "You earned {points} points for making a greener choice🎉 Keep it up!",
   },
 
   reward_redeemed: {

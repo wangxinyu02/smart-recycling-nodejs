@@ -173,6 +173,8 @@ async function sendBinAlertPushNotifications(pushJobs = []) {
       title: job.title,
       body: job.message,
       data: {
+        relatedType: job.type,
+        relatedId: job.referenceId,
         type: job.type,
         reference_id: job.referenceId,
         ...job.data,

@@ -19,6 +19,8 @@ module.exports = {
       body: message,
       data: {
         notification_id: dbNotification.id,
+        relatedType: type,
+        relatedId: referenceId ?? "",
         type,
         reference_id: referenceId ?? "",
         ...data,
@@ -51,6 +53,8 @@ module.exports = {
         title,
         body: message,
         data: {
+          relatedType: type,
+          relatedId: referenceId ?? "",
           type,
           reference_id: referenceId ?? "",
           ...data,

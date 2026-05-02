@@ -3,6 +3,23 @@
 const notificationModel = require("../models/notification.model");
 const response = require("../utils/response.utils");
 
+function withRelatedAliases(notification) {
+  if (!notification) return notification;
+
+  return {
+    ...notification,
+    relatedType: notification.type,
+    relatedId: notification.reference_id,
+  };
+}
+
+function mapNotificationsResult(result) {
+  return {
+    ...result,
+    items: (result.items || []).map(withRelatedAliases),
+  };
+}
+
 exports.getNotifications = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -20,7 +37,7 @@ exports.getNotifications = async (req, res) => {
       unreadOnly,
     });
 
-    return response.success(res, result, "Notifications fetched successfully", 200);
+    return response.success(res, mapNotificationsResult(result), "Notifications fetched successfully", 200);
   } catch (err) {
     console.error("getNotifications error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);
@@ -60,12 +77,12 @@ exports.markNotificationAsRead = async (req, res) => {
     }
 
     if (notification.read_at) {
-      return response.success(res, notification, "Notification already marked as read", 200);
+      return response.success(res, withRelatedAliases(notification), "Notification already marked as read", 200);
     }
 
     const updated = await notificationModel.markAsRead(notificationId);
 
-    return response.success(res, updated, "Notification marked as read successfully", 200);
+    return response.success(res, withRelatedAliases(updated), "Notification marked as read successfully", 200);
   } catch (err) {
     console.error("markNotificationAsRead error:", err);
     return response.error(res, "Internal Server Error", 500, err.message);

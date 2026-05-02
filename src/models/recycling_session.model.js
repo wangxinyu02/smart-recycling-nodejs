@@ -16,6 +16,12 @@ const selectSession = {
   updated_at: true,
 };
 
+function computeEarnPoints(total_co2) {
+  const co2 = Number(total_co2 ?? 0);
+  const points = Math.ceil(co2);
+  return Math.max(1, points);
+}
+
 module.exports = {
   createSession: () => {
     return prisma.recyclingSession.create({
@@ -136,9 +142,36 @@ module.exports = {
       { total_weight_kg: 0, total_co2_saved_kg: 0 },
     );
 
+    const sessionTotalCo2 = Number(session.total_co2 ?? 0);
+    const startWeight =
+      session.start_weight === null || session.start_weight === undefined
+        ? null
+        : Number(session.start_weight);
+    const finalWeight =
+      session.final_weight === null || session.final_weight === undefined
+        ? null
+        : Number(session.final_weight);
+    const weightFromSession =
+      startWeight !== null && finalWeight !== null
+        ? Math.max(0, finalWeight - startWeight)
+        : 0;
+
+    if (totals.total_weight_kg <= 0 && weightFromSession > 0) {
+      totals.total_weight_kg = weightFromSession;
+    }
+
+    if (totals.total_co2_saved_kg <= 0 && sessionTotalCo2 > 0) {
+      totals.total_co2_saved_kg = sessionTotalCo2;
+    }
+
+    let pointsEarned = Number(pointsAgg._sum.points ?? 0);
+    if (pointsEarned <= 0 && session.claimed_at && sessionTotalCo2 > 0) {
+      pointsEarned = computeEarnPoints(sessionTotalCo2);
+    }
+
     return {
       session,
-      points_earned: pointsAgg._sum.points ?? 0,
+      points_earned: pointsEarned,
       breakdown,
       totals,
     };
