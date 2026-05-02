@@ -58,6 +58,11 @@ enum notification_type {
   system
 }
 
+enum device_type {
+  esp32
+  other
+}
+
 model User {
   id                    Int                 @id @default(autoincrement())
   name                  String?             @db.VarChar(100)
@@ -227,11 +232,19 @@ model Bin {
   last_seen_at    DateTime?
   half_alert_active Boolean  @default(false)
   full_alert_active Boolean  @default(false)
+  location        String?    @db.VarChar(150)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+  deleted_at      DateTime?
 
   items    RecyclingItem[]
   logs     BinLog[]
   sessions RecyclingSession[]
+  device_maps       BinDeviceMap[]
 
+  @@index([deleted_at])
+  @@index([status])
+  @@index([material])
   @@map("bins")
 }
 
@@ -291,4 +304,38 @@ model Notification {
   @@index([user_id, read_at])
   @@index([created_at])
   @@map("notifications")
+}
+
+model Device {
+  id            Int         @id @default(autoincrement())
+  name          String?     @db.VarChar(120)
+  type          device_type @default(esp32)
+  mac_address   String      @unique @db.VarChar(30)
+
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
+  deleted_at    DateTime?
+
+  bin_maps      BinDeviceMap[]
+
+  @@index([deleted_at])
+  @@map("devices")
+}
+
+model BinDeviceMap {
+  id          Int       @id @default(autoincrement())
+  bin_id      Int
+  device_id   Int
+
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+
+  bin         Bin       @relation(fields: [bin_id], references: [id], onDelete: Cascade)
+  device      Device    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+
+  @@index([bin_id])
+  @@index([device_id])
+  @@index([deleted_at])
+  @@map("bin_device_maps")
 }
