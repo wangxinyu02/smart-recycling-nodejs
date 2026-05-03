@@ -2,9 +2,12 @@
   "name": "smart-recycling-nodejs",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "postinstall": "prisma generate",
+    "migrate:deploy": "prisma migrate deploy",
+    "dev": "nodemon src/server.js"
   },
   "keywords": [],
   "author": "",
@@ -24,5 +27,8 @@
     "mysql2": "^3.16.3",
     "nodemailer": "^8.0.1",
     "prisma": "^6.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }
