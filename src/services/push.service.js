@@ -2,22 +2,32 @@
 
 const admin = require("../config/firebase.config");
 const userDeviceModel = require("../models/user_device.model");
+const notificationModel = require("../models/notification.model");
 
-function buildFcmMessage({ token, title, body, data = {} }) {
+function buildFcmMessage({ token, title, body, data = {}, badgeCount = 0 }) {
+  const stringData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]));
+
   return {
     token,
     notification: {
       title,
       body,
     },
-    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+    data: {
+      ...stringData,
+      unread_count: String(badgeCount),
+    },
     android: {
       priority: "high",
+      notification: {
+        notificationCount: Number(badgeCount) || 0,
+      },
     },
     apns: {
       payload: {
         aps: {
           sound: "default",
+          badge: Number(badgeCount) || 0,
         },
       },
     },
@@ -27,13 +37,14 @@ function buildFcmMessage({ token, title, body, data = {} }) {
 module.exports = {
   sendToUser: async ({ userId, title, body, data = {} }) => {
     const devices = await userDeviceModel.getActiveTokensByUserId(userId);
+    const unreadCount = await notificationModel.getUnreadCountByUserId(userId);
 
-    console.log("[Push] User devices selected", {
-      user_id: userId,
-      token_count: devices.length,
-      device_ids: devices.map((device) => device.id),
-      token_suffixes: devices.map((device) => String(device.fcm_token || "").slice(-12)),
-    });
+    // console.log("[Push] User devices selected", {
+    //   user_id: userId,
+    //   token_count: devices.length,
+    //   device_ids: devices.map((device) => device.id),
+    //   token_suffixes: devices.map((device) => String(device.fcm_token || "").slice(-12)),
+    // });
 
     if (!devices.length) {
       return { sent: 0, failed: 0, removed_tokens: 0 };
@@ -50,17 +61,12 @@ module.exports = {
           title,
           body,
           data,
+          badgeCount: unreadCount || 0,
         });
 
         const response = await admin.messaging().send(message);
         sent += 1;
-        console.log("[Push] Firebase send success", {
-          user_id: userId,
-          device_id: device.id,
-          token_suffix: String(device.fcm_token || "").slice(-12),
-          title,
-          response,
-        });
+        console.log("[Push] FCM message payload", JSON.stringify(message, null, 2));
       } catch (err) {
         failed += 1;
 

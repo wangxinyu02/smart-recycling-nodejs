@@ -12,12 +12,6 @@ exports.registerDevice = async (req, res) => {
       return response.error(res, "FCM token is required", 400);
     }
 
-    console.log("[UserDevice] Register request", {
-      user_id: userId,
-      role: req.user?.role,
-      token_suffix: String(fcm_token || "").slice(-12),
-    });
-
     const device = await userDeviceModel.upsertDeviceToken({
       userId,
       fcmToken: fcm_token,
@@ -38,17 +32,7 @@ exports.removeDevice = async (req, res) => {
       return response.error(res, "FCM token is required", 400);
     }
 
-    console.log("[UserDevice] Remove request", {
-      user_id: req.user?.id,
-      role: req.user?.role,
-      token_suffix: String(fcm_token || "").slice(-12),
-    });
-
     const result = await userDeviceModel.deleteByToken(fcm_token);
-    console.log("[UserDevice] Remove result", {
-      user_id: req.user?.id,
-      removed_count: result.count,
-    });
 
     return response.success(res, null, "Device removed successfully", 200);
   } catch (err) {
