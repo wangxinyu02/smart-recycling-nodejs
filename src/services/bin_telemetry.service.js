@@ -4,7 +4,6 @@ const {
   createAdminBinAlertNotifications,
   evaluateBinAlerts,
   logBinAlertResets,
-  sendBinAlertPushNotifications,
 } = require("./bin_alert.service");
 
 const DEFAULT_STATUS = "unknown";
@@ -276,6 +275,19 @@ async function recordBinTelemetry(payload) {
         })
       : null;
 
+    const activeSessions = await tx.recyclingSession.findMany({
+      where: {
+        bin_id: binId,
+        ended_at: null,
+      },
+      select: {
+        id: true,
+        bin_id: true,
+        start_weight: true,
+        ended_at: true,
+      },
+    });
+
     return {
       device: {
         id: device.id,
@@ -296,15 +308,11 @@ async function recordBinTelemetry(payload) {
       },
       alert_notifications_created: alertNotificationResult.count,
       alert_push_jobs: alertPushJobs,
+      active_sessions: activeSessions,
     };
   });
 
-  const alertPushResult = await sendBinAlertPushNotifications(result.alert_push_jobs);
-
-  return {
-    ...result,
-    alert_push_result: alertPushResult,
-  };
+  return result;
 }
 
 module.exports = {

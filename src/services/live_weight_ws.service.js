@@ -121,6 +121,24 @@ function formatBinPayload(bin) {
   };
 }
 
+function formatLiveWeightPayload(session, bin) {
+  const startWeight = Number(session.start_weight ?? 0);
+  const currentWeight = Number(bin.current_weight ?? 0);
+  const depositedWeight = Math.max(0, round2(currentWeight - startWeight));
+
+  return {
+    type: "live_weight",
+    session_id: session.id,
+    bin_id: session.bin_id,
+    start_weight: startWeight,
+    current_weight: currentWeight,
+    deposited_weight: depositedWeight,
+    status: bin.status,
+    last_seen_at: bin.last_seen_at,
+    is_active: !session.ended_at,
+  };
+}
+
 async function buildLiveWeightPayload(sessionId) {
   const session = await prisma.recyclingSession.findUnique({
     where: { id: sessionId },
@@ -141,21 +159,7 @@ async function buildLiveWeightPayload(sessionId) {
 
   if (!session || !session.bin_id || !session.bin) return null;
 
-  const startWeight = Number(session.start_weight ?? 0);
-  const currentWeight = Number(session.bin.current_weight ?? 0);
-  const depositedWeight = Math.max(0, round2(currentWeight - startWeight));
-
-  return {
-    type: "live_weight",
-    session_id: session.id,
-    bin_id: session.bin_id,
-    start_weight: startWeight,
-    current_weight: currentWeight,
-    deposited_weight: depositedWeight,
-    status: session.bin.status,
-    last_seen_at: session.bin.last_seen_at,
-    is_active: !session.ended_at,
-  };
+  return formatLiveWeightPayload(session, session.bin);
 }
 
 async function buildAdminBinsPayload() {
@@ -171,7 +175,7 @@ async function buildAdminBinsPayload() {
     },
     orderBy: { id: "desc" },
   });
-console.log('bins: ', bins.map(formatBinPayload))
+
   return {
     type: "admin_bins",
     data: {
@@ -241,6 +245,32 @@ async function broadcastBinTelemetryUpdate(binId) {
   await Promise.all(sessions.map((session) => broadcastSession(session.id)));
 }
 
+async function broadcastBinTelemetryResult(result) {
+  if (!result?.bin?.id) return;
+
+  if (adminBinClients.size > 0) {
+    const payload = {
+      type: "admin_bin_update",
+      data: formatBinPayload(result.bin),
+    };
+
+    for (const socket of adminBinClients) {
+      writeFrame(socket, payload);
+    }
+  }
+
+  const sessions = Array.isArray(result.active_sessions) ? result.active_sessions : [];
+  for (const session of sessions) {
+    const clients = clientsBySessionId.get(session.id);
+    if (!clients || clients.size === 0) continue;
+
+    const payload = formatLiveWeightPayload(session, result.bin);
+    for (const socket of clients) {
+      writeFrame(socket, payload);
+    }
+  }
+}
+
 function parseSessionIdFromPath(pathname) {
   const match = pathname.match(/^\/api\/v1\/recycling-sessions\/(\d+)\/live-weight\/ws$/);
   if (!match) return null;
@@ -296,4 +326,5 @@ function attachLiveWeightWebSocket(server) {
 module.exports = {
   attachLiveWeightWebSocket,
   broadcastBinTelemetryUpdate,
+  broadcastBinTelemetryResult,
 };

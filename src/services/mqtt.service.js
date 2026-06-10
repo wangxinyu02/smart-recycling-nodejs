@@ -1,8 +1,9 @@
 const mqtt = require("mqtt");
 const { MQTT_DEVICE_COMMAND_TOPIC_PREFIX, MQTT_TELEMETRY_TOPIC, MQTT_URL } = require("../config/mqtt.config");
 const deviceModel = require("../models/device.model");
+const { sendBinAlertPushNotifications } = require("./bin_alert.service");
 const { recordBinTelemetry } = require("./bin_telemetry.service");
-const { broadcastBinTelemetryUpdate } = require("./live_weight_ws.service");
+const { broadcastBinTelemetryResult } = require("./live_weight_ws.service");
 
 let client;
 
@@ -43,9 +44,15 @@ async function handleTelemetryMessage(topic, message) {
       status: result.bin.status,
       last_seen_at: result.bin.last_seen_at,
       alert_notifications_created: result.alert_notifications_created,
-      alert_push_result: result.alert_push_result,
     });
-    await broadcastBinTelemetryUpdate(result.bin.id);
+
+    await broadcastBinTelemetryResult(result);
+
+    const alertPushResult = await sendBinAlertPushNotifications(result.alert_push_jobs);
+    console.log("[MQTT] Alert push result:", {
+      bin_id: result.bin.id,
+      alert_push_result: alertPushResult,
+    });
   } catch (err) {
     console.error("[MQTT] Failed to store telemetry:", err.message);
   }
